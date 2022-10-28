@@ -3,13 +3,23 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Single run - Basic test file",
+      "name": "Basic test file",
       "type": "python",
       "request": "launch",
-      "program": "${workspaceFolder}/test.py",
+      "program": "${workspaceFolder}/custom_components/vector/ha_vector/test.py",
       "console": "integratedTerminal",
       "justMyCode": true
-    },    {
+    },
+    {
+      "name": "GRPC test",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/custom_components/vector/ha_vector/test_grpc.py",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+
       "name": "Convert datasets",
       "type": "python",
       "request": "launch",
