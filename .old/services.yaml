@@ -1,0 +1,32 @@
+goto_charger:
+  description: Send Vector to the charger
+  target:
+    entity:
+      integration: vector_robot
+
+leave_charger:
+  description: Ask Vector to leave the charger
+  target:
+    entity:
+      integration: vector_robot
+
+speak:
+  description: Ask Vector to say this message
+  target:
+    entity:
+      integration: vector_robot
+  fields:
+    message:
+      name: Message
+      description: Message that Vector will say
+      example: "Hi! My name is Vector."
+      required: true
+      selector:
+        text:
+    vector_voice:
+      name: Use Vectors voice?
+      description: If selected, uses Vectors voice - else default male voice
+      required: false
+      default: true
+      selector:
+        boolean:

@@ -1,0 +1,24 @@
+{
+    "name": "Digital Dream Labs Vector (Anki Vector)",
+    "documentation": "https://github.com/MTrab/vector/blob/master/README.md",
+    "issue_tracker": "https://github.com/MTrab/vector/issues",
+    "domain": "vector",
+    "iot_class": "cloud_polling",
+    "requirements": [],
+    "after_dependencies": [
+      "http"
+    ],
+    "codeowners": [
+      "@MTrab"
+    ],
+    "loggers": [
+      "ha_vector"
+    ],
+    "dhcp": [
+      {
+        "hostname": "vector-*"
+      }
+    ],
+    "config_flow": true,
+    "version": "0.0.1"
+  }

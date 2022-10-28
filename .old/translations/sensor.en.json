@@ -1,0 +1,41 @@
+{
+    "state": {
+        "vector_robot__battery": {
+            "unknown": "Unknown",
+            "low": "Low",
+            "normal": "Normal",
+            "full": "Full",
+            "no_data": "No state received",
+            "charging": "Charging"
+        },
+        "vector_robot__state": {
+            "no_data": "No state received",
+            "unknown": "Unknown",
+            "sleeping": "Sleeping",
+            "observingoncharger": "Observing from the charger",
+            "interactwithfaces": "Looking at a face",
+            "fistbump": "Awaiting a fist bump",
+            "observing": "Observing the world",
+            "findcube": "Looking for the cube",
+            "fetchcube": "Fetching cube",
+            "listeningforbeats": "Listening for a beat",
+            "popawheelie": "Popping a wheelie",
+            "intheair": "In the air",
+            "movecube": "Moving the cube",
+            "gohome": "Going to the charger",
+            "heldinpalm": "Being held",
+            "petting": "Being petted",
+            "keepaway": "Keep away",
+            "findhome": "Looking for charger",
+            "exploring": "Exploring the world",
+            "reacttohand": "Reacting to a hand",
+            "dancetothebeat": "Dancing to the beat",
+            "stuckonedge": "Stuck on an edge",
+            "reacttocliff": "Found a cliff",
+            "lowbattery": "Battery level low"
+        },
+        "vector_robot__observations": {
+            "no_data": "Nothing observed yet"
+        }
+    }
+}
