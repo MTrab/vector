@@ -1,21 +1,33 @@
 """Digital Dream Labs Vector integration config flow."""
 from __future__ import annotations
-
 import logging
 
 import voluptuous as vol
-from homeassistant import config_entries, exceptions
-from homeassistant.const import CONF_EMAIL, CONF_NAME, CONF_PASSWORD
 
-from .vector_utils.config import validate_input
-from .const import CONF_IP, CONF_SERIAL, DOMAIN
+from ha_vector.setup import VectorSetup
+from homeassistant.const import CONF_EMAIL, CONF_NAME, CONF_PASSWORD
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.config_entries import CONN_CLASS_LOCAL_PUSH, ConfigFlow
+
+from .const import (
+    CONF_CERTIFICATE,
+    CONF_GUID,
+    CONF_IP,
+    CONF_SERIAL,
+    CONF_ESCAPEPOD,
+    DOMAIN,
+)
+
+from .helpers import VectorStore
 
 _LOGGER = logging.getLogger(__name__)
 
-DATA_SCHEMA = vol.Schema(
+DATA_SCHEME = vol.Schema(
     {
-        vol.Required(CONF_EMAIL): str,
-        vol.Required(CONF_PASSWORD): str,
+        vol.Optional(CONF_EMAIL): str,
+        vol.Optional(CONF_PASSWORD): str,
+        vol.Required(CONF_ESCAPEPOD, default=False): bool,
         vol.Required(CONF_NAME): str,
         vol.Required(CONF_SERIAL): str,
         vol.Required(CONF_IP): str,
@@ -23,58 +35,95 @@ DATA_SCHEMA = vol.Schema(
 )
 
 
-class DDLVectorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for DDL Vector."""
+class MissingEmailOrPassword(Exception):
+    """Raised when missing email or password if not using Escapepod."""
+
+
+async def validate_input(hass: HomeAssistant, data: dict) -> bool:
+    """Validate the user input allows us to connect.
+    Data has the keys from DATA_SCHEMA with values provided by the user.
+    """
+    if not data[CONF_ESCAPEPOD]:
+        if not CONF_EMAIL in data or not CONF_PASSWORD in data:
+            raise MissingEmailOrPassword()
+
+    if not "vector-" in data[CONF_NAME].lower():
+        data[CONF_NAME] = f"Vector-{data[CONF_NAME]}"
+
+    store = VectorStore(hass, data[CONF_NAME])
+    await store.async_load()
+    vector_api = VectorSetup(
+        email=data[CONF_EMAIL] if CONF_EMAIL in data else None,
+        password=data[CONF_PASSWORD] if CONF_PASSWORD in data else None,
+        name=data[CONF_NAME],
+        serial=data[CONF_SERIAL],
+        ipaddress=data[CONF_IP],
+        escapepod=data[CONF_ESCAPEPOD],
+        cert_path=store.cert_path,
+        client=async_get_clientsession(hass),
+    )
+
+    await vector_api.async_configure()
+
+    config = {
+        CONF_CERTIFICATE: vector_api.certificate,
+        CONF_NAME: data[CONF_NAME],
+        CONF_GUID: vector_api.guid.replace("b'", "").replace("'", ""),
+    }
+
+    await store.async_save(config)
+
+    return True
+
+
+class VectorRobotConfigFlow(ConfigFlow, domain=DOMAIN):
+    """Config flow handler for Vector Robot integration."""
 
     VERSION = 1
-    CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
+    CONNECTION_CLASS = CONN_CLASS_LOCAL_PUSH
 
     def check_for_existing(self, data):
-        """Check whether an existing entry is using the same URLs."""
+        """Check whether an existing entry is using the same settings."""
         return any(
-            entry.data.get(CONF_NAME) == data.get(CONF_NAME)
-            and entry.data.get(CONF_SERIAL) == data.get(CONF_SERIAL)
-            and entry.data.get(CONF_EMAIL) == data.get(CONF_EMAIL)
-            and entry.data.get(CONF_PASSWORD) == data.get(CONF_PASSWORD)
+            entry.data.get(CONF_SERIAL) == data.get(CONF_SERIAL)
             for entry in self._async_current_entries()
         )
 
     def __init__(self):
         """Initialize the config flow."""
         self._errors = {}
+        self._escapepod = False
 
     async def async_step_user(self, user_input=None):
-        """Handle the initial DDL Vector step."""
+        """Handle the initial Clever integration step."""
         self._errors = {}
+
         if user_input is not None:
             if self.check_for_existing(user_input):
                 return self.async_abort(reason="already_exists")
 
             try:
                 validated = await validate_input(self.hass, user_input)
-            except CannotConnect:
-                self._errors["base"] = "cannot_connect"
-            except InvalidAuth:
-                self._errors["base"] = "invalid_auth"
-            except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Unexpected exception")
+            except MissingEmailOrPassword:
+                _LOGGER.error(
+                    "No email or password was specified and you specified not using Escapepod!"
+                )
+                self._errors["base"] = "missing_email_or_password"
+            except Exception as exc:  # pylint: disable=broad-except
+                _LOGGER.error("Unexpected exception: %s", exc)
                 self._errors["base"] = "unknown"
 
             if "base" not in self._errors:
+                await self.async_set_unique_id(
+                    f"{user_input[CONF_NAME]}_{user_input[CONF_SERIAL]}"
+                )
+
                 return self.async_create_entry(
                     title=user_input[CONF_NAME],
                     data=user_input,
-                    description=f"SDK connector for {user_input[CONF_NAME]}",
+                    description=f"Vector robot: '{user_input[CONF_NAME]}'",
                 )
 
         return self.async_show_form(
-            step_id="user", data_schema=DATA_SCHEMA, errors=self._errors
+            step_id="user", data_schema=DATA_SCHEME, errors=self._errors
         )
-
-
-class InvalidAuth(exceptions.HomeAssistantError):
-    """Error to indicate there is invalid auth."""
-
-
-class CannotConnect(exceptions.HomeAssistantError):
-    """Error to indicate we cannot connect."""

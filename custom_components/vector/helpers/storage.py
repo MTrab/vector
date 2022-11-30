@@ -10,12 +10,17 @@ from ..const import DOMAIN
 STORAGE_VERSION = 1
 STORAGE_KEY: Final = DOMAIN
 
+
 class VectorStore(storage.Store):
     """Definition of Vector Storage."""
 
-    def __init__(self, hass: HomeAssistant, name: str) -> None:
-        super().__init__(hass, STORAGE_VERSION, f"{STORAGE_KEY}/{name}")
-        self._name = name
+    def __init__(self, hass: HomeAssistant, name: str | None = None) -> None:
+        if isinstance(name, type(None)):
+            super().__init__(hass, STORAGE_VERSION, f"{STORAGE_KEY}/datasets.json")
+            self._name = "datasets.json"
+        else:
+            super().__init__(hass, STORAGE_VERSION, f"{STORAGE_KEY}/{name}")
+            self._name = name
 
     async def _async_migrate_func(self, old_major_version, old_minor_version, old_data):
         return await super()._async_migrate_func(

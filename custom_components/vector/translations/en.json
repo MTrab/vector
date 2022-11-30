@@ -1,0 +1,24 @@
+{
+    "config": {
+        "abort": {
+            "already_exists": "This robot has already been configured and cannot be added again."
+        },
+        "error": {
+            "unknown": "Unknown error occured. Check your logs for more information.",
+            "missing_email_or_password": "You have selected not to use Escapepod and haven't specified email or password as needed."
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "escapepod": "Connected via Escapepod or Wire-Pod?",
+                    "ip_address": "IP address of the Vector robot",
+                    "serial_number": "Serial number of the Vector robot",
+                    "email": "Email - only if not connected via Escapepod",
+                    "password": "Password - only if not connected via Escapepod",
+                    "name": "Vector-XXXX name of the robot"
+                },
+                "title": "Add a Vector robot to your Home Assistant"
+            }
+        }
+    }
+}
