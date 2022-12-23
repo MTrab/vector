@@ -1,5 +1,6 @@
 """Helper to handle config and certificate storage"""
 from __future__ import annotations
+import logging
 from typing import Final
 
 from homeassistant.core import HomeAssistant
@@ -9,6 +10,8 @@ from ..const import DOMAIN
 
 STORAGE_VERSION = 1
 STORAGE_KEY: Final = DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class VectorStore(storage.Store):

@@ -1,0 +1,14 @@
+{
+    "entity": {
+      "sensor": {
+        "battery": {
+          "state": {
+            "unknown": "Unknown",
+            "low": "Low",
+            "normal": "Normal",
+            "full": "Fully charged"
+          }
+        }
+      }
+    }
+  }

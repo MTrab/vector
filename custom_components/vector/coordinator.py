@@ -1,20 +1,23 @@
 """Vector robot update coordinator."""
 # pylint: disable=unused-argument
+# pylint: disable=no-member
 from __future__ import annotations
+import json
 
 import logging
 from datetime import datetime, timedelta
 from enum import IntEnum
 from typing import Optional
+import grpc
+import ha_vector
 
 import pytz
-from ha_vector.exceptions import VectorTimeoutException, VectorNotFoundException
+from ha_vector.exceptions import VectorNotFoundException, VectorUnauthenticatedException
 from ha_vector import messaging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, EVENT_HOMEASSISTANT_STOP, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
-from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 
@@ -23,6 +26,11 @@ from .const import (
     CONF_IP,
     CONF_SERIAL,
     DOMAIN,
+    STATE_ALIVE_DISTANCE,
+    STATE_ALIVE_PET_MS,
+    STATE_ALIVE_SECONDS,
+    STATE_ALIVE_SENSOR_SCORE,
+    STATE_ALIVE_TRIGGERWORDS,
     STATE_CHARGNING,
     STATE_CUBE_BATTERY_VOLTS,
     STATE_CUBE_FACTORY_ID,
@@ -71,13 +79,13 @@ class VectorDataSetUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
         await self._datasets.async_refresh()
 
 
-async def getLifetime(conn) -> messaging.protocol.PullJdocsResponse:
+async def get_lifetime(conn) -> messaging.protocol.PullJdocsResponse:
+    """Get lifetime stats from the robot."""
     req = messaging.protocol.PullJdocsRequest(
         jdoc_types=[
             messaging.settings_pb2.ROBOT_SETTINGS,
             messaging.settings_pb2.ROBOT_LIFETIME_STATS,
             messaging.settings_pb2.ACCOUNT_SETTINGS,
-            messaging.settings_pb2.USER_ENTITLEMENTS,
         ]
     )
     return await conn.grpc_interface.PullJdocs(req)
@@ -124,6 +132,12 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
             self.robot.connect()
         except VectorNotFoundException:
             raise HomeAssistantError("Unable to connect to the robot!") from None
+        except VectorUnauthenticatedException as exc:
+            _LOGGER.debug(exc.status)
+            if exc.status == grpc.StatusCode.RESOURCE_EXHAUSTED:
+                raise ConfigEntryNotReady(
+                    "Too many auth requests, try again later"
+                ) from exc
 
         hass.bus.async_listen_once(
             EVENT_HOMEASSISTANT_STOP, self.async_disconnect(hass=hass, coordinator=self)
@@ -140,12 +154,20 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
         except:  # pylint: disable=bare-except
             pass
 
+    async def async_subscribe_events(self) -> None:
+        """Subscribe events."""
+        await self.hass.data[DOMAIN][self.entry.entry_id]["events"].async_subscribe()
+
+    async def async_unsubscribe_events(self) -> None:
+        """Unsubscribe events."""
+        await self.hass.data[DOMAIN][self.entry.entry_id]["events"].async_unsubscribe()
+
     async def _async_update_data(self) -> datetime | None:
         """Handle data update request from the coordinator."""
         battery_state = self.robot.get_battery_state().result(timeout=10)
         version_state = self.robot.get_version_state().result(timeout=10)
         lifetime_state = self.robot.conn.run_coroutine(
-            getLifetime(self.robot.conn)
+            get_lifetime(self.robot.conn)
         ).result(timeout=10)
 
         if battery_state:
@@ -193,3 +215,29 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
             self.states.set_robot_attribute(
                 STATE_FIRMWARE_VERSION, version_state.os_version
             )
+
+        if lifetime_state:
+            for jdoc in lifetime_state.named_jdocs:
+                if (
+                    jdoc.jdoc_type
+                    == ha_vector.messaging.settings_pb2.ROBOT_LIFETIME_STATS
+                ):
+                    data = json.loads(jdoc.doc.json_doc)
+                    _LOGGER.debug(jdoc)
+                    self.states.set_robot_attribute(
+                        STATE_ALIVE_SECONDS, data["Alive.seconds"]
+                    )
+                    self.states.set_robot_attribute(
+                        STATE_ALIVE_TRIGGERWORDS, data["BStat.ReactedToTriggerWord"]
+                    )
+                    self.states.set_robot_attribute(
+                        STATE_ALIVE_PET_MS, int(data["Pet.ms"] / 100)
+                    )
+                    self.states.set_robot_attribute(
+                        STATE_ALIVE_DISTANCE, int(data["Odom.Body"] / 1000000)
+                    )
+                    self.states.set_robot_attribute(
+                        STATE_ALIVE_SENSOR_SCORE, int(data["Stim.CumlPosDelta"] / 10)
+                    )
+
+        return True

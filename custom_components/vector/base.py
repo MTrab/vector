@@ -9,11 +9,12 @@ from functools import partial
 
 from ha_vector.exceptions import VectorAsyncException, VectorTimeoutException
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, STATE_FIRMWARE_VERSION, STATE_NO_DATA
+from .const import DOMAIN, STATE_FIRMWARE_VERSION
 from .coordinator import VectorConnectionState
 from .helpers import States
 from .coordinator import VectorDataUpdateCoordinator
@@ -46,7 +47,7 @@ class VectorBaseEntityDescription:
     """Describes a Vector sensor."""
 
     translate_key: str | None = None
-    start_value: str = STATE_NO_DATA
+    start_value: str = STATE_UNKNOWN
     value_fn: Callable[[States]] | str = start_value
     attribute_fn: Callable[[States]] | str = field(default_factory=dict)
 
@@ -56,10 +57,7 @@ class VectorBase(CoordinatorEntity[VectorDataUpdateCoordinator]):
 
     _attr_icon = "mdi:robot"
 
-    def __init__(
-        self,
-        coordinator,
-    ):
+    def __init__(self, coordinator, identifiers: dict | None = None) -> None:
         """Initialise a Vector base."""
 
         self.coordinator: VectorDataUpdateCoordinator = coordinator
@@ -71,14 +69,18 @@ class VectorBase(CoordinatorEntity[VectorDataUpdateCoordinator]):
         self._generation = "1.0" if self.coordinator.serial.startswith("00") else "2.0"
         self._vendor = "Anki" if self._generation == "1.0" else "Digital Dream Labs"
 
+        self._identifiers = (
+            identifiers
+            if not isinstance(identifiers, type(None))
+            else {(DOMAIN, self.entry.entry_id, self.coordinator.friendly_name)}
+        )
+
     @property
     def device_info(self) -> dict:
         """Set device information."""
 
         return {
-            "identifiers": {
-                (DOMAIN, self.entry.entry_id, self.coordinator.friendly_name)
-            },
+            "identifiers": self._identifiers,
             "name": str(self.coordinator.friendly_name),
             "manufacturer": self._vendor,
             "model": "Vector",

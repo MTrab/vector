@@ -17,7 +17,7 @@ from ..exceptions import VectorDatasetException
 
 _LOGGER = logging.getLogger(__name__)
 
-BASE_URL = "https://raw.githubusercontent.com/MTrab/vector_robot/new-dev/Datasets/{}"
+BASE_URL = "https://raw.githubusercontent.com/MTrab/vector/development-v1/Datasets/{}"
 
 
 class VectorDatasets(IntEnum):

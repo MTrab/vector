@@ -1,7 +1,7 @@
 """Vector robot sensors."""
 from __future__ import annotations
-from collections.abc import Callable
-from dataclasses import dataclass, field
+
+from dataclasses import dataclass
 from enum import Enum, IntEnum
 
 import logging
@@ -13,25 +13,28 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_UNKNOWN
+from homeassistant.const import STATE_UNKNOWN, LENGTH_CENTIMETERS
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import slugify as util_slugify
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .base import VectorBase, VectorBaseEntityDescription
 from .const import (
     DOMAIN,
-    ICON_CUBE,
+    ICON_DISTANCE,
     ICON_ROBOT,
+    ICON_STATS,
     LANG_BATTERY,
-    STATE_CUBE_BATTERY_VOLTS,
-    STATE_CUBE_FACTORY_ID,
-    STATE_CUBE_LAST_CONTACT,
-    STATE_NO_DATA,
+    LANG_LIFETIME,
+    LANG_STATE,
+    STATE_ALIVE_PET_MS,
+    STATE_ALIVE_SENSOR_SCORE,
+    STATE_ALIVE_TRIGGERWORDS,
     STATE_ROBOT_BATTERY_VOLTS,
     STATE_ROBOT_IS_CHARGNING,
     STATE_ROBOT_IS_ON_CHARGER,
+    UPDATE_SIGNAL,
 )
 from .mappings import ICONS
 
@@ -55,6 +58,8 @@ class VectorSensorFeature(Enum):
     STATUS = "status"
     OBSERVATION = "observation"
     FACE = "face"
+    LIFETIME_STATS = "lifetime_stats"
+    DRIVEN_DISTANCE = "driven_distance"
 
 
 @dataclass
@@ -64,6 +69,7 @@ class VectorSensorEntityDescription(
     """Describes a Vector sensor."""
 
     sensor_type: VectorSensorType = VectorSensorType.STATE
+    update_signal: str | None = None
 
 
 SENSORS = [
@@ -73,10 +79,10 @@ SENSORS = [
         device_class=SensorDeviceClass.BATTERY,
         icon=ICONS[ICON_ROBOT],
         sensor_type=VectorSensorType.BATTERY,
-        translate_key=LANG_BATTERY,
+        translation_key=LANG_BATTERY,
         value_fn=lambda states: states.robot_battery_state()
         if not states.robot_battery_state() == STATE_UNKNOWN
-        else STATE_NO_DATA,
+        else STATE_UNKNOWN,
         attribute_fn=lambda attributes: attributes.get_robot_battery_attributes(
             {
                 STATE_ROBOT_BATTERY_VOLTS: "voltage",
@@ -86,22 +92,57 @@ SENSORS = [
         ),
     ),
     VectorSensorEntityDescription(
-        key=VectorSensorFeature.BATTERY_CUBE,
-        name="Cube battery Level",
-        device_class=SensorDeviceClass.BATTERY,
-        icon=ICONS[ICON_CUBE],
-        sensor_type=VectorSensorType.BATTERY,
-        translate_key=LANG_BATTERY,
-        value_fn=lambda states: states.cube_battery_state()
-        if not states.cube_battery_state() == STATE_UNKNOWN
-        else STATE_NO_DATA,
-        attribute_fn=lambda attributes: attributes.cube_battery_attributes(
+        key=VectorSensorFeature.LIFETIME_STATS,
+        name="Age",
+        device_class=SensorDeviceClass.DURATION,
+        icon=ICONS[ICON_STATS],
+        sensor_type=VectorSensorType.STATE,
+        translation_key=LANG_LIFETIME,
+        value_fn=lambda states: states.robot_age
+        if not states.robot_age == STATE_UNKNOWN
+        else STATE_UNKNOWN,
+        attribute_fn=lambda attributes: attributes.get_robot_attributes(
             {
-                STATE_CUBE_BATTERY_VOLTS: "voltage",
-                STATE_CUBE_FACTORY_ID: "mac_address",
-                STATE_CUBE_LAST_CONTACT: "last_contact",
+                STATE_ALIVE_TRIGGERWORDS: "reacts_to_triggerword",
+                STATE_ALIVE_PET_MS: "seconds_petted",
+                STATE_ALIVE_SENSOR_SCORE: "sensory_score",
             }
         ),
+    ),
+    VectorSensorEntityDescription(
+        key=VectorSensorFeature.DRIVEN_DISTANCE,
+        name="Distance driven",
+        device_class=SensorDeviceClass.DISTANCE,
+        icon=ICONS[ICON_DISTANCE],
+        sensor_type=VectorSensorType.STATE,
+        translation_key=LANG_LIFETIME,
+        value_fn=lambda states: states.robot_distance
+        if not states.robot_age == STATE_UNKNOWN
+        else STATE_UNKNOWN,
+        native_unit_of_measurement=LENGTH_CENTIMETERS,
+    ),
+    VectorSensorEntityDescription(
+        key=VectorSensorFeature.STATUS,
+        name="Status",
+        icon=ICONS[ICON_ROBOT],
+        sensor_type=VectorSensorType.STATE,
+        translation_key=LANG_STATE,
+        update_signal=UPDATE_SIGNAL.format("robot", "{}", "robot_status"),
+        value_fn=lambda states: states.robot_state
+        if not states.robot_state == STATE_UNKNOWN
+        else STATE_UNKNOWN,
+        # attribute_fn=lambda attributes: attributes.get_robot_attributes(
+        #     {
+        #         STATE_FIRMWARE_VERSION: "firmware_version",
+        #         STATE_STIMULATION: "stimulation",
+        #         STATE_CARRYING_OBJECT: "carrying_object_id",
+        #         STATE_HEAD_TRACKING_ID: "head_tracking_object_id",
+        #         STATE_CAMERA_ENABLED: "camera_stream_enabled",
+        #         STATE_GYRO: "gyro",
+        #         STATE_ACCEL: "acceleration",
+        #         STATE_LIFT_HEIGHT: "lift_height_mm",
+        #     }
+        # ),
     ),
 ]
 
@@ -122,10 +163,12 @@ class VectorBaseSensorEntity(VectorBase, RestoreSensor):
             VectorDataUpdateCoordinator,
         )
 
+        RestoreSensor.__init__(coordinator)
+        VectorBase.__init__(self, coordinator)
+
         self.coordinator: VectorDataUpdateCoordinator = coordinator
         self.entry: ConfigEntry = coordinator.entry
         self.hass: HomeAssistant = coordinator.hass
-        super().__init__(coordinator)
 
         self.entity_description = description
 
@@ -140,9 +183,17 @@ class VectorBaseSensorEntity(VectorBase, RestoreSensor):
         self._attr_icon = description.icon
 
         self._attr_extra_state_attributes = {}
-        self._attr_native_value = self.entity_description.start_value
-        self._attr_device_class = f"{DOMAIN}__{self.entity_description.translate_key}"
+        # self._attr_native_value = self.entity_description.start_value
+        self._attr_device_class = f"{DOMAIN}__{self.entity_description.translation_key}"
         self._attr_name = self.entity_description.name
+        if not isinstance(self.entity_description.update_signal, type(None)):
+            update = self.entity_description.update_signal.format(self.coordinator.name)
+            _LOGGER.debug("Update signal: %s", update)
+            async_dispatcher_connect(
+                self.hass,
+                update,
+                self._handle_coordinator_update,
+            )
 
     async def async_added_to_hass(self) -> None:
         """Register entity for updates from API."""
@@ -155,9 +206,10 @@ class VectorBaseSensorEntity(VectorBase, RestoreSensor):
             " - Updating sensor state: '%s'",
             self.entity_description.value_fn(self.coordinator.states),
         )
-        self._attr_native_value = self.entity_description.value_fn(
-            self.coordinator.states
+        self._attr_native_value = str(
+            self.entity_description.value_fn(self.coordinator.states)
         )
+
         try:
             _LOGGER.debug(
                 " - Setting attributes: %s",

@@ -1,6 +1,7 @@
 """Vector states handler."""
 from __future__ import annotations
 
+import datetime
 import logging
 from typing import Any
 
@@ -11,6 +12,11 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from ..const import (
     STATE_ACCEL,
+    STATE_ALIVE_DISTANCE,
+    STATE_ALIVE_PET_MS,
+    STATE_ALIVE_SECONDS,
+    STATE_ALIVE_SENSOR_SCORE,
+    STATE_ALIVE_TRIGGERWORDS,
     STATE_CAMERA_ENABLED,
     STATE_CARRYING_OBJECT,
     STATE_CARRYING_OBJECT_ON_TOP,
@@ -32,6 +38,7 @@ from ..const import (
     STATE_ROBOT_SUGGESTED_CHARGE,
     STATE_STIMULATION,
     STATE_TOUCH,
+    UPDATE_SIGNAL,
 )
 from ..helpers.images import convert_pil_image_to_byte_array
 
@@ -85,9 +92,9 @@ class States:
 
     def __init__(self, coordinator) -> None:
         """Initialize the handler."""
-        from ..coordinator import (  # pylint: disable=import-outside-toplevel
+        from ..coordinator import (
             VectorDataUpdateCoordinator,
-        )
+        )  # pylint: disable=import-outside-toplevel
 
         # Local used attrs
 
@@ -113,6 +120,11 @@ class States:
                 STATE_GYRO,
                 STATE_PROXIMITY,
                 STATE_TOUCH,
+                STATE_ALIVE_SECONDS,
+                STATE_ALIVE_TRIGGERWORDS,
+                STATE_ALIVE_PET_MS,
+                STATE_ALIVE_DISTANCE,
+                STATE_ALIVE_SENSOR_SCORE,
             ]
         )
 
@@ -223,6 +235,18 @@ class States:
         return None
 
     @property
+    def robot_distance(self) -> str:
+        """Get the distance driven by the robot."""
+        return self._robot_state.attributes[STATE_ALIVE_DISTANCE]
+
+    @property
+    def robot_age(self) -> datetime:
+        """Get the age of the robot."""
+        return datetime.timedelta(
+            seconds=self._robot_state.attributes[STATE_ALIVE_SECONDS]
+        )
+
+    @property
     def robot_state(self) -> str:
         """Return the robot state."""
         return (
@@ -234,6 +258,10 @@ class States:
     def set_robot_state(self, value: str) -> None:
         """Return or set the robot state."""
         self._robot_state.state = value
+        async_dispatcher_send(
+            self.hass,
+            UPDATE_SIGNAL.format("robot", self.coordinator.name, "robot_status"),
+        )
 
     def get_robot_attributes(self, attributes: dict | str | None):
         """Return all attributes, one specific or just the ones in the dictionary."""

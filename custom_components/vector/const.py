@@ -12,7 +12,7 @@ https://github.com/mtrab/vector/issues
 """
 
 # Integration specific CONF_ attributes
-CONF_CERTIFICATE = "certificate"
+CONF_CERTIFICATE = "cert"
 CONF_ESCAPEPOD = "escapepod"
 CONF_GUID = "guid"
 CONF_IP = "ip_address"
@@ -25,6 +25,8 @@ DOMAIN = "vector"
 ICON_CUBE = "cube"
 ICON_ROBOT = "robot"
 ICON_FACE = "face"
+ICON_STATS = "stats"
+ICON_DISTANCE = "distance"
 
 # Translation keys
 LANG_STATE = "state"
@@ -32,6 +34,8 @@ LANG_BATTERY = "battery"
 LANG_STIMULI = "stimuli"
 LANG_OBSERVATIONS = "observations"
 LANG_FACE = "face"
+LANG_LIFETIME = "lifetime"
+LANG_STATE = "states"
 
 # States
 STATE_TIME_STAMPED = "time_stamped_feature"
@@ -52,7 +56,6 @@ STATE_CARRYING_OBJECT_ON_TOP = "carrying_object_on_top_id"
 STATE_HEAD_TRACKING_ID = "head_tracking_id"
 STATE_FOUND_OBJECT = "found_object"
 STATE_LIFT_IN_FOV = "lift_in_fov"
-STATE_NO_DATA = "no_data"
 STATE_ONLINE = "online"
 STATE_SLEEPING = "sleeping"
 STATE_CAMERA_ENABLED = "camera_stream_enabled"
@@ -76,3 +79,11 @@ STATE_LOW = "low"
 STATE_NORMAL = "normal"
 STATE_FULL = "full"
 STATE_CHARGNING = "charging"
+STATE_ALIVE_SECONDS = "alive_seconds"
+STATE_ALIVE_TRIGGERWORDS = "reacts_to_triggerword"
+STATE_ALIVE_PET_MS = "time_petted"
+STATE_ALIVE_DISTANCE = "driven_distance"
+STATE_ALIVE_SENSOR_SCORE = "sensory_score"
+
+# Update signal key
+UPDATE_SIGNAL = "vector_{}_{}_{}"

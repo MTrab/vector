@@ -1,2 +1,3 @@
 https://community.home-assistant.io/t/anki-vector-integration/85156/20
 https://github.com/TurkMcGill/vectorator
+https://icanhazdadjoke.com/api
