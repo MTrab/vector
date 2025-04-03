@@ -5,7 +5,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 #Force removal of pyworxcloud to ensure reinstall every time
-pip uninstall -y pyworxcloud
+pip uninstall -y ha_vector
 
 # Create config dir if not present
 if [[ ! -d "${PWD}/config" ]]; then
