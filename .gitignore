@@ -1,9 +1,17 @@
-__pycache__/
-*.pyc
-test.py
-test_grpc.py
-whatisupdated.txt
-configuration.yaml
-.devcontainer/configuration.yaml
-.env
-.vector/
+# artifacts
+__pycache__
+.pytest*
+*.egg-info
+*/build/*
+*/dist/*
+
+
+# misc
+.coverage
+.vscode
+coverage.xml
+
+
+# Home Assistant configuration
+config/*
+!config/configuration.yaml
