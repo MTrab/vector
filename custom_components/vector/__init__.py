@@ -1,24 +1,25 @@
 """Vector robot integration."""
+
 from __future__ import annotations
 
 import logging
 from typing import Optional, cast
+
 import grpc
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_EMAIL, CONF_NAME, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError, ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.loader import async_get_integration
 from homeassistant.util import slugify as util_slugify
 
-from .coordinator import VectorDataSetUpdateCoordinator, VectorDataUpdateCoordinator
-
 from .const import BANNER, DOMAIN
-from .helpers import VectorStore, VectorEvents
+from .coordinator import VectorDataSetUpdateCoordinator, VectorDataUpdateCoordinator
+from .helpers import VectorEvents, VectorStore
 
 _LOGGER = logging.getLogger(__name__)
 
-VALID_PLATFORMS = ["sensor","camera"]
+VALID_PLATFORMS = ["binary_sensor", "button", "sensor"]  # , "camera"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -46,6 +47,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         coordinator = VectorDataUpdateCoordinator(hass, entry)
+        await coordinator.connect()
     except HomeAssistantError as exc:
         raise ConfigEntryNotReady(
             f"Error connecting to {entry.data[CONF_NAME]}: {exc}"
@@ -57,7 +59,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_subscribe_events()
     await coordinator.async_config_entry_first_refresh()
 
-    hass.config_entries.async_setup_platforms(entry, VALID_PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(entry, VALID_PLATFORMS)
 
     return True
 

@@ -9,3 +9,7 @@ pip3 install uv==0.6.8
 cd "$(dirname "$0")/.."
 
 python3 -m pip install --requirement requirements.txt
+python3 -m pip install ffmpeg
+
+apt update
+apt install tcpdump libpcap0.8-dev ffmpeg libturbojpeg0 -y

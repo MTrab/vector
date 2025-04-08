@@ -37,6 +37,8 @@ LANG_FACE = "face"
 LANG_LIFETIME = "lifetime"
 LANG_STATE = "states"
 
+LENGTH_CENTIMETERS = "cm"
+
 # States
 STATE_TIME_STAMPED = "time_stamped_feature"
 STATE_FIRMWARE_VERSION = "firmware_version"

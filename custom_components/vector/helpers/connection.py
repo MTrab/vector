@@ -1,6 +1,8 @@
 """Vector connector handler."""
+
 # pylint: disable=bare-except,unused-argument
 from __future__ import annotations
+
 import asyncio
 import logging
 

@@ -1,25 +1,30 @@
 """Vector robot update coordinator."""
+
 # pylint: disable=unused-argument
 # pylint: disable=no-member
 from __future__ import annotations
-import json
 
+import asyncio
+import json
 import logging
 from datetime import datetime, timedelta
 from enum import IntEnum
 from typing import Optional
+
 import grpc
 import ha_vector
-
 import pytz
-from ha_vector.exceptions import VectorNotFoundException, VectorUnauthenticatedException
 from ha_vector import messaging
+from ha_vector.exceptions import (
+    VectorControlTimeoutException,
+    VectorNotFoundException,
+    VectorUnauthenticatedException,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, EVENT_HOMEASSISTANT_STOP, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-
 
 from .const import (
     CONF_ESCAPEPOD,
@@ -44,10 +49,9 @@ from .const import (
 from .helpers import Connection, DataSets, States
 from .mappings import BATTERYMAP_TO_STATE, CUBE_BATTERYMAP_TO_STATE
 
-
 _LOGGER = logging.getLogger(__name__)
 
-SCAN_INTERVAL = timedelta(minutes=1)
+SCAN_INTERVAL = timedelta(seconds=30)
 
 
 class VectorConnectionState(IntEnum):
@@ -113,23 +117,50 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
         self.datasets = hass.data[DOMAIN]["datasets"]
         self.states = States(self)
 
-        try:
-            self.robot = Connection(
-                self.serial,
-                behavior_control_level=None,
-                cache_animation_lists=False,
-                enable_face_detection=True,
-                enable_nav_map_feed=True,
-                name=self.vector_name,
-                escape_pod=self.entry.data[CONF_ESCAPEPOD],
-                ip=self.entry.data[CONF_IP],
-                config=self.config,
-            )
-        except Exception:  # pylint: disable=bare-except
-            raise ConfigEntryNotReady("Error setting up VectorHandler object") from None
+        # try:
+        self.robot = Connection(
+            self.serial,
+            behavior_control_level=None,
+            cache_animation_lists=False,
+            enable_face_detection=True,
+            enable_nav_map_feed=False,
+            name=self.vector_name,
+            escape_pod=self.entry.data[CONF_ESCAPEPOD],
+            ip=self.entry.data[CONF_IP],
+            config=self.config,
+            default_logging=False,
+        )
+        # except Exception:  # pylint: disable=bare-except
+        #     raise ConfigEntryNotReady("Error setting up VectorHandler object") from None
 
+        self.hass.bus.async_listen_once(
+            EVENT_HOMEASSISTANT_STOP, self.async_disconnect(hass=hass, coordinator=self)
+        )
+
+    async def leave_charger(self) -> None:
+        """Make the robot leave the charger."""
+        _LOGGER.debug("Asking robot to leave charger.")
+        await asyncio.wrap_future(self.robot.conn.request_control())
+        await asyncio.wrap_future(self.robot.behavior.drive_off_charger())
         try:
-            self.robot.connect()
+            await asyncio.wrap_future(self.robot.conn.release_control())
+        except VectorControlTimeoutException:
+            pass
+
+    async def dock_charger(self) -> None:
+        """Make the robot leave the charger."""
+        _LOGGER.debug("Asking robot to go to the charger.")
+        await asyncio.wrap_future(self.robot.conn.request_control())
+        await asyncio.wrap_future(self.robot.behavior.drive_on_charger())
+        try:
+            await asyncio.wrap_future(self.robot.conn.release_control())
+        except VectorControlTimeoutException:
+            pass
+
+    async def connect(self) -> None:
+        """Connect to the robot."""
+        try:
+            await self.hass.async_add_executor_job(self.robot.connect)
         except VectorNotFoundException:
             raise HomeAssistantError("Unable to connect to the robot!") from None
         except VectorUnauthenticatedException as exc:
@@ -138,10 +169,6 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
                 raise ConfigEntryNotReady(
                     "Too many auth requests, try again later"
                 ) from exc
-
-        hass.bus.async_listen_once(
-            EVENT_HOMEASSISTANT_STOP, self.async_disconnect(hass=hass, coordinator=self)
-        )
 
     async def async_disconnect(
         self, hass: HomeAssistant, coordinator: VectorDataUpdateCoordinator
@@ -164,80 +191,89 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
 
     async def _async_update_data(self) -> datetime | None:
         """Handle data update request from the coordinator."""
-        battery_state = self.robot.get_battery_state().result(timeout=10)
-        version_state = self.robot.get_version_state().result(timeout=10)
-        lifetime_state = self.robot.conn.run_coroutine(
-            get_lifetime(self.robot.conn)
-        ).result(timeout=10)
+        try:
+            battery_state = self.robot.get_battery_state().result(timeout=10)
+            version_state = self.robot.get_version_state().result(timeout=10)
 
-        if battery_state:
-            self.states.robot_battery_state(
-                BATTERYMAP_TO_STATE[battery_state.battery_level]
-                if not battery_state.is_charging
-                else STATE_CHARGNING
-            )
-            self.states.robot_battery_attributes(
-                STATE_ROBOT_BATTERY_VOLTS, round(battery_state.battery_volts, 2)
-            )
-            self.states.robot_battery_attributes(
-                STATE_ROBOT_IS_CHARGNING, battery_state.is_charging
-            )
-            self.states.robot_battery_attributes(
-                STATE_ROBOT_IS_ON_CHARGER, battery_state.is_on_charger_platform
-            )
-            self.states.robot_battery_attributes(
-                STATE_ROBOT_SUGGESTED_CHARGE, battery_state.suggested_charger_sec
-            )
+            lifetime_state = self.robot.conn.run_coroutine(
+                get_lifetime(self.robot.conn)
+            ).result(timeout=10)
 
-            if hasattr(battery_state, "cube_battery"):
-                cube_battery = battery_state.cube_battery
-                self.states.cube_battery_state(
-                    CUBE_BATTERYMAP_TO_STATE[cube_battery.level]
-                    if not cube_battery.battery_volts == 0.0
-                    else STATE_UNKNOWN
+            if battery_state:
+                self.states.robot_battery_state(
+                    BATTERYMAP_TO_STATE[battery_state.battery_level]
+                    if not battery_state.is_charging
+                    else STATE_CHARGNING
                 )
-                self.states.cube_battery_attributes(
-                    {
-                        STATE_CUBE_BATTERY_VOLTS: round(cube_battery.battery_volts, 2),
-                        STATE_CUBE_FACTORY_ID: cube_battery.factory_id,
-                        STATE_CUBE_LAST_CONTACT: (
-                            datetime.utcnow()
-                            - timedelta(
-                                seconds=int(cube_battery.time_since_last_reading_sec)
-                            )
-                        ).astimezone(pytz.UTC),
-                    }
+                self.states.robot_battery_attributes(
+                    STATE_ROBOT_BATTERY_VOLTS, round(battery_state.battery_volts, 2)
                 )
-            else:
-                self.states.cube_battery_state(STATE_UNKNOWN)
+                self.states.robot_battery_attributes(
+                    STATE_ROBOT_IS_CHARGNING, battery_state.is_charging
+                )
+                self.states.robot_battery_attributes(
+                    STATE_ROBOT_IS_ON_CHARGER, battery_state.is_on_charger_platform
+                )
+                self.states.robot_battery_attributes(
+                    STATE_ROBOT_SUGGESTED_CHARGE, battery_state.suggested_charger_sec
+                )
 
-        if version_state:
-            self.states.set_robot_attribute(
-                STATE_FIRMWARE_VERSION, version_state.os_version
-            )
+                if hasattr(battery_state, "cube_battery"):
+                    cube_battery = battery_state.cube_battery
+                    self.states.cube_battery_state(
+                        CUBE_BATTERYMAP_TO_STATE[cube_battery.level]
+                        if not cube_battery.battery_volts == 0.0
+                        else STATE_UNKNOWN
+                    )
+                    self.states.cube_battery_attributes(
+                        {
+                            STATE_CUBE_BATTERY_VOLTS: round(
+                                cube_battery.battery_volts, 2
+                            ),
+                            STATE_CUBE_FACTORY_ID: cube_battery.factory_id,
+                            STATE_CUBE_LAST_CONTACT: (
+                                datetime.utcnow()
+                                - timedelta(
+                                    seconds=int(
+                                        cube_battery.time_since_last_reading_sec
+                                    )
+                                )
+                            ).astimezone(pytz.UTC),
+                        }
+                    )
+                else:
+                    self.states.cube_battery_state(STATE_UNKNOWN)
 
-        if lifetime_state:
-            for jdoc in lifetime_state.named_jdocs:
-                if (
-                    jdoc.jdoc_type
-                    == ha_vector.messaging.settings_pb2.ROBOT_LIFETIME_STATS
-                ):
-                    data = json.loads(jdoc.doc.json_doc)
-                    _LOGGER.debug(jdoc)
-                    self.states.set_robot_attribute(
-                        STATE_ALIVE_SECONDS, data["Alive.seconds"]
-                    )
-                    self.states.set_robot_attribute(
-                        STATE_ALIVE_TRIGGERWORDS, data["BStat.ReactedToTriggerWord"]
-                    )
-                    self.states.set_robot_attribute(
-                        STATE_ALIVE_PET_MS, int(data["Pet.ms"] / 100)
-                    )
-                    self.states.set_robot_attribute(
-                        STATE_ALIVE_DISTANCE, int(data["Odom.Body"] / 1000000)
-                    )
-                    self.states.set_robot_attribute(
-                        STATE_ALIVE_SENSOR_SCORE, int(data["Stim.CumlPosDelta"] / 10)
-                    )
+            if version_state:
+                self.states.set_robot_attribute(
+                    STATE_FIRMWARE_VERSION, version_state.os_version
+                )
 
-        return True
+            if lifetime_state:
+                for jdoc in lifetime_state.named_jdocs:
+                    if (
+                        jdoc.jdoc_type
+                        == ha_vector.messaging.settings_pb2.ROBOT_LIFETIME_STATS
+                    ):
+                        data = json.loads(jdoc.doc.json_doc)
+                        _LOGGER.debug(jdoc)
+                        self.states.set_robot_attribute(
+                            STATE_ALIVE_SECONDS, data["Alive.seconds"]
+                        )
+                        self.states.set_robot_attribute(
+                            STATE_ALIVE_TRIGGERWORDS, data["BStat.ReactedToTriggerWord"]
+                        )
+                        self.states.set_robot_attribute(
+                            STATE_ALIVE_PET_MS, int(data["Pet.ms"] / 100)
+                        )
+                        self.states.set_robot_attribute(
+                            STATE_ALIVE_DISTANCE, int(data["Odom.Body"] / 1000000)
+                        )
+                        self.states.set_robot_attribute(
+                            STATE_ALIVE_SENSOR_SCORE,
+                            int(data["Stim.CumlPosDelta"] / 10),
+                        )
+
+            return True
+        except VectorUnauthenticatedException:
+            return False

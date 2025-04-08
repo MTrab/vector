@@ -1,4 +1,5 @@
 """Base definitions."""
+
 from __future__ import annotations
 
 import logging
@@ -15,9 +16,8 @@ from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, STATE_FIRMWARE_VERSION
-from .coordinator import VectorConnectionState
+from .coordinator import VectorConnectionState, VectorDataUpdateCoordinator
 from .helpers import States
-from .coordinator import VectorDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,26 +46,22 @@ def connect(self) -> bool:
 class VectorBaseEntityDescription:
     """Describes a Vector sensor."""
 
-    translate_key: str | None = None
     start_value: str = STATE_UNKNOWN
     value_fn: Callable[[States]] | str = start_value
-    attribute_fn: Callable[[States]] | str = field(default_factory=dict)
+    attribute_fn: Callable[[States]] | str | None = None
 
 
 class VectorBase(CoordinatorEntity[VectorDataUpdateCoordinator]):
     """Defines a Vector base class."""
 
-    _attr_icon = "mdi:robot"
-
     def __init__(self, coordinator, identifiers: dict | None = None) -> None:
         """Initialise a Vector base."""
+        super().__init__(coordinator)
 
         self.coordinator: VectorDataUpdateCoordinator = coordinator
         self.entry: ConfigEntry = coordinator.entry
         self.hass: HomeAssistant = coordinator.hass
 
-        super().__init__(coordinator)
-        self.coordinator = coordinator
         self._generation = "1.0" if self.coordinator.serial.startswith("00") else "2.0"
         self._vendor = "Anki" if self._generation == "1.0" else "Digital Dream Labs"
 

@@ -1,25 +1,32 @@
 """Digital Dream Labs Vector integration config flow."""
+
 from __future__ import annotations
+
 import logging
 
+import ha_vector
 import voluptuous as vol
-
-from ha_vector.setup import VectorSetup
+from bleak import discover
+from homeassistant.config_entries import (
+    CONN_CLASS_LOCAL_PUSH,
+    ConfigFlow,
+    ConfigFlowResult,
+)
 from homeassistant.const import CONF_EMAIL, CONF_NAME, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.config_entries import CONN_CLASS_LOCAL_PUSH, ConfigFlow
+from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
 from .const import (
     CONF_CERTIFICATE,
+    CONF_ESCAPEPOD,
     CONF_GUID,
     CONF_IP,
     CONF_SERIAL,
-    CONF_ESCAPEPOD,
     DOMAIN,
 )
-
 from .helpers import VectorStore
+from .vector_setup import VectorSetup
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,7 +34,7 @@ DATA_SCHEME = vol.Schema(
     {
         vol.Optional(CONF_EMAIL): str,
         vol.Optional(CONF_PASSWORD): str,
-        vol.Required(CONF_ESCAPEPOD, default=False): bool,
+        vol.Required(CONF_ESCAPEPOD, default=True): bool,
         vol.Required(CONF_NAME): str,
         vol.Required(CONF_SERIAL): str,
         vol.Required(CONF_IP): str,
@@ -127,3 +134,10 @@ class VectorRobotConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user", data_schema=DATA_SCHEME, errors=self._errors
         )
+
+    async def async_step_dhcp(
+        self, discovery_info: DhcpServiceInfo
+    ) -> ConfigFlowResult:
+        """Handle DHCP discovery for Vector robots."""
+
+        _LOGGER.debug("Discovered device: %s", discovery_info)

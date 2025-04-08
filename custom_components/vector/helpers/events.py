@@ -1,13 +1,14 @@
 """Handle events from Vector."""
+
 from __future__ import annotations
 
 import logging
 from typing import Any
 
+from ha_vector import Robot
+from ha_vector.events import Events
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from ha_vector.events import Events
-from ha_vector import Robot
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ class VectorEvents:
 
     async def on_robot_state(self, robot: Robot, event_type, event, *args, **kwargs):
         """Robot state received."""
-        # _LOGGER.debug(event)
+        # _LOGGER.debug("Robot state: %s", event)
 
     def on_image(self, robot: Robot, event_type, event, *args, **kwargs):
         """Called when Vector receives a new image."""

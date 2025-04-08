@@ -1,14 +1,16 @@
 """Vector states handler."""
+
 from __future__ import annotations
 
 import datetime
 import logging
+import math
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.dispatcher import dispatcher_send
 
 from ..const import (
     STATE_ACCEL,
@@ -41,6 +43,10 @@ from ..const import (
     UPDATE_SIGNAL,
 )
 from ..helpers.images import convert_pil_image_to_byte_array
+
+MAXVOLTAGE = 4.1
+MIDVOLTAGE = 3.85
+MINVOLTAGE = 3.5
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -92,9 +98,9 @@ class States:
 
     def __init__(self, coordinator) -> None:
         """Initialize the handler."""
-        from ..coordinator import (
+        from ..coordinator import (  # pylint: disable=import-outside-toplevel
             VectorDataUpdateCoordinator,
-        )  # pylint: disable=import-outside-toplevel
+        )
 
         # Local used attrs
 
@@ -155,16 +161,20 @@ class States:
 
         return None
 
-    def get_robot_battery_attributes(self, attributes: dict | None):
+    def get_robot_battery_attributes(self, attributes: dict | str | None):
         """Return all attributes or just the ones in the dictionary."""
         if isinstance(attributes, type(None)):
             return self._batteries.robot.attributes
 
-        attribute_list = {}
-        for attr, name in attributes.items():
-            attribute_list.update({name: self._batteries.robot.attributes[attr]})
+        if isinstance(attributes, dict):
+            attribute_list = {}
+            for attr, name in attributes.items():
+                attribute_list.update({name: self._batteries.robot.attributes[attr]})
 
-        return attribute_list
+            return attribute_list
+        else:
+            _LOGGER.debug("Returning %s from attributes", attribute_list[attributes])
+            return attribute_list[attributes]
 
     def robot_battery_attributes(
         self, attribute: str | dict | None = None, value: Any | None = None
@@ -235,6 +245,26 @@ class States:
         return None
 
     @property
+    def robot_battery_percentage(self) -> int:
+        """Get the battery level in percent."""
+        voltage = self._batteries.robot.attributes[STATE_ROBOT_BATTERY_VOLTS]
+        percent = 0
+        if voltage >= MAXVOLTAGE:
+            percent = 100
+        elif voltage >= MIDVOLTAGE:
+            scaled = (voltage - MIDVOLTAGE) / (MAXVOLTAGE - MIDVOLTAGE)
+            percent = 80 + 20 * math.log10(1 + scaled * 9)
+        elif voltage >= MINVOLTAGE:
+            scaled = (voltage - MIDVOLTAGE) / (MAXVOLTAGE - MIDVOLTAGE)
+            percent = 80 * math.log10(1 + scaled * 9)
+        elif isinstance(voltage, type(None)):
+            percent = 70
+        else:
+            percent = 0
+
+        return int(percent)
+
+    @property
     def robot_distance(self) -> str:
         """Get the distance driven by the robot."""
         return self._robot_state.attributes[STATE_ALIVE_DISTANCE]
@@ -242,6 +272,7 @@ class States:
     @property
     def robot_age(self) -> datetime:
         """Get the age of the robot."""
+        _LOGGER.debug(vars(self._robot_state))
         return datetime.timedelta(
             seconds=self._robot_state.attributes[STATE_ALIVE_SECONDS]
         )
@@ -258,7 +289,7 @@ class States:
     def set_robot_state(self, value: str) -> None:
         """Return or set the robot state."""
         self._robot_state.state = value
-        async_dispatcher_send(
+        dispatcher_send(
             self.hass,
             UPDATE_SIGNAL.format("robot", self.coordinator.name, "robot_status"),
         )
@@ -279,9 +310,11 @@ class States:
         for attr, name in attributes.items():
             attribute_list.update(
                 {
-                    name: self._robot_state.attributes[attr]
-                    if attr in self._robot_state.attributes
-                    else STATE_UNKNOWN
+                    name: (
+                        self._robot_state.attributes[attr]
+                        if attr in self._robot_state.attributes
+                        else STATE_UNKNOWN
+                    )
                 }
             )
 

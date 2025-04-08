@@ -18,13 +18,13 @@
   ],
   "dhcp": [
     {
-      "hostname": "vector*"
+      "hostname": "Vector*"
     }
   ],
   "zeroconf": [
     {
       "type": "_tcp.local.",
-      "name": "vector*"
+      "name": "Vector*"
     }
   ],
   "config_flow": true,
