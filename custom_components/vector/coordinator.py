@@ -90,7 +90,6 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self._camera_stream_lock = asyncio.Lock()
         self._camera_frame_event = asyncio.Event()
         self._settings_lock = asyncio.Lock()
-        self._warned_missing_serial = False
         self._auth_backoff_delay_seconds = _AUTH_BACKOFF_BASE_DELAY_SECONDS
         self._auth_backoff_lock = asyncio.Lock()
 
@@ -580,13 +579,6 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         if not host or not robot_name:
             raise ValueError("Missing required robot identity values in config entry")
         mode = _resolve_provision_mode(serial=serial, email=email, password=password)
-        if mode == "wirepod" and not serial and not self._warned_missing_serial:
-            self._warned_missing_serial = True
-            _LOGGER.warning(
-                "Vector config entry is missing serial; manufacturer/generation detection may be incorrect. "
-                "Reconfigure the integration and set serial."
-            )
-
         robot_config = await pyddlvector.provision_runtime_robot(
             mode=mode,
             name=robot_name,
@@ -763,14 +755,15 @@ def _resolve_provision_mode(
     email: str | None,
     password: str | None,
 ) -> str:
+    if not serial:
+        raise ValueError("Serial is required")
+
     has_email = bool(email)
     has_password = bool(password)
 
     if has_email or has_password:
         if not (has_email and has_password):
             raise ValueError("Official mode requires both email and password")
-        if not serial:
-            raise ValueError("Official mode requires serial")
         return "official"
 
     return "wirepod"

@@ -27,7 +27,7 @@ USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_ROBOT_NAME): str,
         vol.Required(CONF_HOST): str,
-        vol.Optional(CONF_SERIAL): str,
+        vol.Required(CONF_SERIAL): str,
         vol.Optional(CONF_EMAIL): str,
         vol.Optional(CONF_PASSWORD): str,
     }
@@ -81,10 +81,10 @@ class VectorConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_robot_name"
             elif not self._is_valid_host(host):
                 errors["base"] = "invalid_host"
+            elif not serial:
+                errors["base"] = "serial_required"
             elif bool(email) != bool(password):
                 errors["base"] = "official_credentials_incomplete"
-            elif (email or password) and not serial:
-                errors["base"] = "serial_required_for_official"
 
             if not errors:
                 unique_host = serial if serial else host

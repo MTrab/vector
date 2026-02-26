@@ -93,8 +93,11 @@ def test_is_unauthenticated_error_from_string() -> None:
 
 
 def test_resolve_provision_mode_wirepod_by_default() -> None:
-    """When credentials are absent we should use wire-pod mode."""
-    assert _resolve_provision_mode(serial=None, email=None, password=None) == "wirepod"
+    """Without credentials, serial still produces wire-pod mode."""
+    assert (
+        _resolve_provision_mode(serial="00abc123", email=None, password=None)
+        == "wirepod"
+    )
 
 
 def test_resolve_provision_mode_official_with_all_credentials() -> None:
@@ -124,7 +127,7 @@ def test_resolve_provision_mode_rejects_partial_credentials() -> None:
 
 
 def test_resolve_provision_mode_rejects_missing_serial_in_official_mode() -> None:
-    """Official mode must include serial."""
+    """Serial is required in all modes."""
     try:
         _resolve_provision_mode(
             serial=None,
@@ -135,3 +138,17 @@ def test_resolve_provision_mode_rejects_missing_serial_in_official_mode() -> Non
         assert "serial" in str(err).lower()
     else:
         raise AssertionError("Expected ValueError when official mode misses serial")
+
+
+def test_resolve_provision_mode_rejects_missing_serial_in_wirepod_mode() -> None:
+    """Wire-pod mode also requires serial."""
+    try:
+        _resolve_provision_mode(
+            serial=None,
+            email=None,
+            password=None,
+        )
+    except ValueError as err:
+        assert "serial" in str(err).lower()
+    else:
+        raise AssertionError("Expected ValueError when wire-pod mode misses serial")
