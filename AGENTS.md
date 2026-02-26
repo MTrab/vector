@@ -47,6 +47,16 @@ If there is uncertainty, stop and request clarification.
 
 If the repository becomes a monorepo, additional `AGENTS.md` files may exist in subdirectories with scoped instructions.
 
+## External Module Repository
+
+The Python communication module source code is maintained in:
+
+- `/development/github/homeassistant/pyddlvector`
+
+From this workspace, the agent has access to work in that repository as well, including creating branches, making edits, committing, and pushing.
+
+All module changes MUST be made in dedicated branches intended for merge (no direct commits to main/master), so full change tracking is preserved.
+
 ---
 
 ## Environment & Setup
@@ -95,6 +105,7 @@ If certificates or tokens are required:
 - Do not introduce large refactors in the same change as functional modifications unless explicitly requested.
 - Keep commits small and focused.
 - Avoid introducing new dependencies unless justified.
+- Use `ruff` as formatter/linter in this repository.
 
 ## Home Assistant Compliance
 
