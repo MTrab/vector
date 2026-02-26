@@ -140,6 +140,7 @@ def test_stimulation_sensor_value_and_attributes() -> None:
     entity = VectorStimulationSensor(coordinator, entry)
 
     assert entity.native_value == 0.42
+    assert entity.entity_registry_enabled_default is False
     assert entity.extra_state_attributes == {
         "velocity": 0.11,
         "accel": -0.03,

@@ -104,6 +104,7 @@ class VectorStimulationSensor(VectorEntity, SensorEntity):
     _attr_translation_key = "stimulation"
     _attr_icon = "mdi:heart-pulse"
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_registry_enabled_default = False
 
     def __init__(self, coordinator: VectorCoordinator, entry: ConfigEntry) -> None:
         """Initialize stimulation sensor."""
