@@ -9,8 +9,8 @@ from custom_components.vector.coordinator import (
     _derive_activity_from_robot_state,
     _extract_camera_frame_bytes,
     _is_unauthenticated_error,
-    _normalize_stimulation_snapshot,
     _normalize_battery_level_name,
+    _normalize_stimulation_snapshot,
     _resolve_provision_mode,
 )
 

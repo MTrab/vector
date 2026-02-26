@@ -12,13 +12,7 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
-from .const import (
-    CONF_EMAIL,
-    CONF_ROBOT_NAME,
-    CONF_SERIAL,
-    DOMAIN,
-    VECTOR_NAME_PREFIX,
-)
+from .const import CONF_EMAIL, CONF_ROBOT_NAME, CONF_SERIAL, DOMAIN, VECTOR_NAME_PREFIX
 
 VECTOR_HOSTNAME_RE = re.compile(r"^Vector-[A-Za-z0-9]{4,}$", re.IGNORECASE)
 HOST_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.-]{0,252}[A-Za-z0-9]$")

@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from custom_components.vector.const import CONF_HOST, CONF_ROBOT_NAME
 from custom_components.vector.camera import VectorVisionCamera
+from custom_components.vector.const import CONF_HOST, CONF_ROBOT_NAME
 
 
 class FakeCoordinator:
