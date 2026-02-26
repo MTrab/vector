@@ -44,7 +44,6 @@ If there is uncertainty, stop and request clarification.
 - `tests/` — Unit and integration tests
 - `docs/` — Protocol documentation, architecture notes
 - `scripts/` — Development utilities, mostly for running Home Assistant tasks
-- `proto/` or `anki_vector/messaging/` — Protobuf definitions (if applicable)
 
 If the repository becomes a monorepo, additional `AGENTS.md` files may exist in subdirectories with scoped instructions.
 
@@ -57,49 +56,7 @@ The agent must use the exact versions defined in the project configuration files
 ### Requirements
 
 - OS: (Specify if restricted)
-- Runtime: (e.g., Python X.Y / Node X / .NET X)
-- Package manager: (pip / poetry / uv / npm / pnpm / etc.)
-- Docker: `docker compose` (v2 syntax only)
-
-### Install
-
-```bash
-<INSERT INSTALL COMMANDS>
-```
-
-### Run Locally
-
-```bash
-<INSERT RUN COMMANDS>
-```
-
-### Lint / Format
-
-```bash
-<INSERT LINT COMMANDS>
-```
-
-### Tests
-
-Quick tests:
-
-```bash
-<INSERT TEST COMMAND>
-```
-
-Full test suite:
-
-```bash
-<INSERT TEST COMMAND>
-```
-
-CI-equivalent local check:
-
-```bash
-<INSERT COMMAND>
-```
-
----
+- Runtime: Python 3.13
 
 ## Vector Robot Integration Rules
 
