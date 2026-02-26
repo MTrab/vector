@@ -130,6 +130,11 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self._auth_backoff_delay_seconds = _AUTH_BACKOFF_BASE_DELAY_SECONDS
         return None
 
+    async def async_validate_connection(self) -> None:
+        """Validate robot connectivity/auth for config entry setup."""
+        client, messaging = await self._async_get_client()
+        await self._async_read_battery_state(client, messaging)
+
     async def async_start_event_listener(self) -> None:
         """Start persistent push listener from robot event stream."""
         if (
