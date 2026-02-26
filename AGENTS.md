@@ -57,6 +57,8 @@ From this workspace, the agent has access to work in that repository as well, in
 
 All module changes MUST be made in dedicated branches intended for merge (no direct commits to main/master), so full change tracking is preserved.
 
+When testing integration changes in this repository that depend on in-progress `pyddlvector` module changes, the agent MUST update `custom_components/vector/manifest.json` to point to the specific `pyddlvector` branch being used for that test cycle.
+
 ---
 
 ## Environment & Setup
