@@ -54,3 +54,6 @@ autolabeler:
   - label: 'feature request'
     branch:
       - '/feature\/.+/'
+  - label: 'chore'
+    branch:
+      - '/chore\/.+/'
