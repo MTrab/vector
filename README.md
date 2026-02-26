@@ -37,13 +37,10 @@ You can use either of these modes:
 
 ### ~~Option 1: HACS (recommended)~~
 
-~~1. Open HACS in Home Assistant.~~
-
-~~2. Add this repository as a custom repository (category: Integration).~~
-
-~~3. Install `Vector`.~~
-
-~~4. Restart Home Assistant.~~
+1. ~~Open HACS in Home Assistant.~~
+2. ~~Add this repository as a custom repository (category: Integration).~~
+3. ~~Install `Vector`.~~
+4. ~~Restart Home Assistant.~~
 
 ### Option 2: HACS via manual custom repository
 
