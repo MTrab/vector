@@ -1,0 +1,24 @@
+{
+  "domain": "vector",
+  "name": "Digital Dream Labs Vector (Anki Vector)",
+  "documentation": "https://github.com/MTrab/vector",
+  "issue_tracker": "https://github.com/MTrab/vector/issues",
+  "codeowners": [
+    "@MTrab"
+  ],
+  "config_flow": true,
+  "iot_class": "local_push",
+  "version": "0.1.0",
+  "requirements": [],
+  "dhcp": [
+    {
+      "hostname": "Vector-*"
+    }
+  ],
+  "zeroconf": [
+    {
+      "type": "_tcp.local.",
+      "name": "Vector-*"
+    }
+  ]
+}
