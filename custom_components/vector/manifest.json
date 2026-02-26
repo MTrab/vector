@@ -1,22 +1,22 @@
 {
   "domain": "vector",
   "name": "Digital Dream Labs Vector (Anki Vector)",
-  "documentation": "https://github.com/MTrab/vector",
-  "issue_tracker": "https://github.com/MTrab/vector/issues",
   "codeowners": [
     "@MTrab"
   ],
   "config_flow": true,
-  "iot_class": "local_push",
-  "version": "0.1.0",
-  "requirements": [
-    "pyddlvector@git+https://github.com/MTrab/pyddlvector.git@main"
-  ],
   "dhcp": [
     {
       "hostname": "vector-*"
     }
   ],
+  "documentation": "https://github.com/MTrab/vector",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/MTrab/vector/issues",
+  "requirements": [
+    "pyddlvector@git+https://github.com/MTrab/pyddlvector.git@main"
+  ],
+  "version": "0.1.0",
   "zeroconf": [
     {
       "type": "_tcp.local.",
