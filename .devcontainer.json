@@ -40,5 +40,8 @@
 	"remoteUser": "root",
 	"features": {
 		"ghcr.io/devcontainers/features/rust:1": {}
-	}
+	},
+	"mounts": [
+		"source=${localEnv:HOME}/.codex/auth.json,target=/etc/codex/auth.json,readonly,type=bind"
+	]
 }
