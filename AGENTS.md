@@ -59,6 +59,24 @@ All module changes MUST be made in dedicated branches intended for merge (no dir
 
 When testing integration changes in this repository that depend on in-progress `pyddlvector` module changes, the agent MUST update `custom_components/vector/manifest.json` to point to the specific `pyddlvector` branch being used for that test cycle.
 
+## Reference Source (Ideas and Code)
+
+The agent may use the following project as a technical reference for ideas and implementation patterns:
+
+- https://github.com/kercre123/wire-pod
+
+Reference use means:
+
+- Compare protocol behavior and integration approaches
+- Reuse concepts selectively where they improve quality and maintainability
+- Validate assumptions against known working implementations
+
+Reference use does NOT mean:
+
+- Blind copying of architecture or legacy patterns
+- Copying code without adapting it to Home Assistant standards and this repository's constraints
+- Bypassing security, async, or quality requirements defined in this document
+
 ---
 
 ## Environment & Setup
@@ -98,6 +116,7 @@ If certificates or tokens are required:
 - Prefer structured errors where applicable.
 - Fail explicitly rather than silently ignoring errors.
 - Surface actionable error messages.
+- ALWAYS test for race conditions in relevant async/concurrent flows before considering a change complete.
 
 ---
 

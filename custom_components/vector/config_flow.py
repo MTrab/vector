@@ -45,7 +45,9 @@ class VectorConfigFlow(ConfigFlow, domain=DOMAIN):
         normalized_host = host.strip()
         return f"{normalized_name}_{normalized_host}"
 
-    async def _async_set_discovery(self, robot_name: str, host: str) -> ConfigFlowResult | None:
+    async def _async_set_discovery(
+        self, robot_name: str, host: str
+    ) -> ConfigFlowResult | None:
         """Apply duplicate checks and set flow unique id for discovery."""
         unique_id = self._discovery_unique_id(robot_name, host)
         await self.async_set_unique_id(unique_id)
@@ -54,14 +56,16 @@ class VectorConfigFlow(ConfigFlow, domain=DOMAIN):
         self.context["title_placeholders"] = {"name": robot_name, "host": host}
         return None
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Handle the initial user step."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
             robot_name = user_input[CONF_ROBOT_NAME].strip()
             host = user_input[CONF_HOST].strip()
-            serial = user_input.get(CONF_SERIAL, "").strip() or None
+            serial = user_input.get(CONF_SERIAL, "").strip().lower() or None
 
             if not VECTOR_HOSTNAME_RE.match(robot_name):
                 errors["base"] = "invalid_robot_name"
@@ -70,7 +74,9 @@ class VectorConfigFlow(ConfigFlow, domain=DOMAIN):
 
             if not errors:
                 unique_host = serial if serial else host
-                await self.async_set_unique_id(self._discovery_unique_id(robot_name, unique_host))
+                await self.async_set_unique_id(
+                    self._discovery_unique_id(robot_name, unique_host)
+                )
                 self._abort_if_unique_id_configured()
 
                 data = {
@@ -82,9 +88,13 @@ class VectorConfigFlow(ConfigFlow, domain=DOMAIN):
 
                 return self.async_create_entry(title=robot_name, data=data)
 
-        return self.async_show_form(step_id="user", data_schema=USER_DATA_SCHEMA, errors=errors)
+        return self.async_show_form(
+            step_id="user", data_schema=USER_DATA_SCHEMA, errors=errors
+        )
 
-    async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> ConfigFlowResult:
+    async def async_step_dhcp(
+        self, discovery_info: DhcpServiceInfo
+    ) -> ConfigFlowResult:
         """Handle DHCP discovery."""
         hostname = (discovery_info.hostname or "").strip()
         ip_address = str(discovery_info.ip)
@@ -102,7 +112,9 @@ class VectorConfigFlow(ConfigFlow, domain=DOMAIN):
             },
         )
 
-    async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> ConfigFlowResult:
+    async def async_step_zeroconf(
+        self, discovery_info: ZeroconfServiceInfo
+    ) -> ConfigFlowResult:
         """Handle Zeroconf discovery."""
         name = (discovery_info.name or "").strip()
         host = (discovery_info.host or "").strip()

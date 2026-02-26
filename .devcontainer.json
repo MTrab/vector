@@ -43,6 +43,7 @@
 		"ghcr.io/devcontainers/features/rust:1": {}
 	},
 	"mounts": [
-		"source=${localEnv:HOME}/.codex/auth.json,target=/etc/codex/auth.json,readonly,type=bind"
+		"source=${localEnv:HOME}/.codex/auth.json,target=/etc/codex/auth.json,readonly,type=bind",
+		"source=${localWorkspaceFolder}/../pyddlvector,target=/development/github/homeassistant/pyddlvector,type=bind"
 	]
 }

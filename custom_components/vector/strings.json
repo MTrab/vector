@@ -1,4 +1,49 @@
 {
+  "entity": {
+    "select": {
+      "master_volume": {
+        "name": "Volume",
+        "state": {
+          "mute": "Mute",
+          "low": "Low",
+          "medium_low": "Medium Low",
+          "medium": "Medium",
+          "medium_high": "Medium High",
+          "high": "High"
+        }
+      }
+    },
+    "sensor": {
+      "battery": {
+        "name": "Battery"
+      },
+      "days_alive": {
+        "name": "Days alive"
+      },
+      "reacted_to_trigger_word": {
+        "name": "Reacted to trigger word"
+      },
+      "seconds_petted": {
+        "name": "Seconds petted"
+      },
+      "distance_moved": {
+        "name": "Distance moved"
+      },
+      "current_activity": {
+        "name": "Current activity",
+        "state": {
+          "unknown": "Unknown",
+          "sleeping": "Sleeping",
+          "moving": "Moving",
+          "being_touched": "Being touched",
+          "carrying_object": "Carrying object",
+          "charging": "Charging",
+          "on_charger": "On charger",
+          "idle": "Idle"
+        }
+      }
+    }
+  },
   "config": {
     "step": {
       "user": {
