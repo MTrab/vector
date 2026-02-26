@@ -5,14 +5,16 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import time
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_UNKNOWN
+from homeassistant.const import CONF_PASSWORD, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    CONF_EMAIL,
     CONF_HOST,
     MASTER_VOLUME_OPTIONS,
     CONF_ROBOT_NAME,
@@ -24,11 +26,15 @@ _LOGGER = logging.getLogger(__name__)
 _DEFAULT_TIMEOUT_SECONDS = 10.0
 _MAX_EVENT_READS = 10
 _STREAM_READ_TIMEOUT_SECONDS = 120.0
-_MAX_STREAM_RECONNECT_ATTEMPTS = 5
 _STREAM_RECONNECT_DELAY_SECONDS = 3.0
 _INITIAL_REFRESH_TIMEOUT_SECONDS = 20.0
 _INITIAL_REFRESH_RETRY_ATTEMPTS = 5
 _INITIAL_REFRESH_RETRY_DELAY_SECONDS = 3.0
+_INITIAL_REFRESH_MAX_RETRY_DELAY_SECONDS = 60.0
+_CAMERA_STREAM_READ_TIMEOUT_SECONDS = 30.0
+_CAMERA_RECONNECT_DELAY_SECONDS = 2.0
+_AUTH_BACKOFF_BASE_DELAY_SECONDS = 15.0
+_AUTH_BACKOFF_MAX_DELAY_SECONDS = 300.0
 
 _STATUS_IS_MOVING = 0x1
 _STATUS_IS_CARRYING_BLOCK = 0x2
@@ -73,12 +79,19 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self.stimulation_min_value: float | None = None
         self.stimulation_max_value: float | None = None
         self.stimulation_emotion_events: tuple[str, ...] = ()
+        self.camera_frame: bytes | None = None
+        self.camera_frame_updated_monotonic: float | None = None
         self._client: Any | None = None
         self._robot_config: Any | None = None
         self._pyddlvector: Any | None = None
         self._messaging: Any | None = None
         self._event_listener_task: asyncio.Task[None] | None = None
+        self._camera_stream_task: asyncio.Task[None] | None = None
+        self._camera_stream_lock = asyncio.Lock()
+        self._camera_frame_event = asyncio.Event()
         self._settings_lock = asyncio.Lock()
+        self._auth_backoff_delay_seconds = _AUTH_BACKOFF_BASE_DELAY_SECONDS
+        self._auth_backoff_lock = asyncio.Lock()
 
     async def _async_update_data(self) -> None:
         """Do initial one-shot load at setup."""
@@ -114,7 +127,13 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             self.distance_moved_cm = lifetime_stats.distance_moved_cm
         self.master_volume = master_volume
         self.current_activity = activity
+        self._auth_backoff_delay_seconds = _AUTH_BACKOFF_BASE_DELAY_SECONDS
         return None
+
+    async def async_validate_connection(self) -> None:
+        """Validate robot connectivity/auth for config entry setup."""
+        client, messaging = await self._async_get_client()
+        await self._async_read_battery_state(client, messaging)
 
     async def async_start_event_listener(self) -> None:
         """Start persistent push listener from robot event stream."""
@@ -130,6 +149,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
 
     async def async_start_runtime(self) -> None:
         """Initialize runtime data and start push listener without blocking HA startup."""
+        retry_delay = _INITIAL_REFRESH_RETRY_DELAY_SECONDS
         for attempt in range(1, _INITIAL_REFRESH_RETRY_ATTEMPTS + 1):
             try:
                 await asyncio.wait_for(
@@ -144,6 +164,12 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                     _INITIAL_REFRESH_RETRY_ATTEMPTS,
                 )
             except Exception as err:
+                if _is_unauthenticated_error(err):
+                    await self._async_handle_auth_failure(
+                        "initial refresh",
+                        err,
+                    )
+                    continue
                 _LOGGER.warning(
                     "Initial Vector refresh failed (attempt %s/%s): %s",
                     attempt,
@@ -163,7 +189,11 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 )
 
             if attempt < _INITIAL_REFRESH_RETRY_ATTEMPTS:
-                await asyncio.sleep(_INITIAL_REFRESH_RETRY_DELAY_SECONDS)
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(
+                    retry_delay * 2,
+                    _INITIAL_REFRESH_MAX_RETRY_DELAY_SECONDS,
+                )
 
         await self.async_start_event_listener()
 
@@ -177,6 +207,15 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 pass
             finally:
                 self._event_listener_task = None
+
+        if self._camera_stream_task is not None:
+            self._camera_stream_task.cancel()
+            try:
+                await self._camera_stream_task
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self._camera_stream_task = None
 
         if self._client is None:
             return
@@ -247,8 +286,6 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
 
     async def _async_event_listener_loop(self) -> None:
         """Keep a persistent event stream open and push updates to entities."""
-        reconnect_attempts = 0
-
         while True:
             stream = None
             try:
@@ -270,7 +307,6 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                         continue
 
                     event_type = event_response.event.WhichOneof("event_type")
-                    reconnect_attempts = 0
 
                     has_changes = False
                     if event_type == "robot_state":
@@ -296,19 +332,13 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             except asyncio.CancelledError:
                 raise
             except Exception as err:
-                reconnect_attempts += 1
+                if _is_unauthenticated_error(err):
+                    await self._async_handle_auth_failure("event stream", err)
+                    continue
                 _LOGGER.warning(
-                    "Vector event stream interrupted (%s/%s): %s",
-                    reconnect_attempts,
-                    _MAX_STREAM_RECONNECT_ATTEMPTS,
+                    "Vector event stream interrupted: %s",
                     err,
                 )
-                if reconnect_attempts >= _MAX_STREAM_RECONNECT_ATTEMPTS:
-                    _LOGGER.error(
-                        "Vector event stream stopped after %s consecutive failures",
-                        _MAX_STREAM_RECONNECT_ATTEMPTS,
-                    )
-                    return
                 await asyncio.sleep(_STREAM_RECONNECT_DELAY_SECONDS)
             finally:
                 if stream is not None:
@@ -394,6 +424,74 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             self.master_volume = str(selected).strip().lower()
             self.async_set_updated_data(None)
 
+    async def async_start_camera_stream(self) -> None:
+        """Ensure persistent camera stream task is running."""
+        async with self._camera_stream_lock:
+            if (
+                self._camera_stream_task is not None
+                and not self._camera_stream_task.done()
+            ):
+                return
+            self._camera_stream_task = self.hass.async_create_background_task(
+                self._async_camera_stream_loop(),
+                name=f"vector_camera_stream_{self.entry.entry_id}",
+            )
+
+    async def async_get_latest_camera_frame(
+        self,
+        *,
+        wait_timeout: float = 1.0,
+    ) -> bytes | None:
+        """Return latest JPEG frame, optionally waiting for first frame."""
+        await self.async_start_camera_stream()
+
+        if self.camera_frame is not None:
+            return self.camera_frame
+
+        try:
+            await asyncio.wait_for(
+                self._camera_frame_event.wait(), timeout=wait_timeout
+            )
+        except TimeoutError:
+            return None
+
+        return self.camera_frame
+
+    async def _async_camera_stream_loop(self) -> None:
+        """Keep persistent camera feed stream and cache latest frame."""
+        while True:
+            stream = None
+            try:
+                client, messaging = await self._async_get_client()
+                stream = client.stub.CameraFeed(messaging.protocol.CameraFeedRequest())
+
+                while True:
+                    response = await asyncio.wait_for(
+                        stream.read(),
+                        timeout=_CAMERA_STREAM_READ_TIMEOUT_SECONDS,
+                    )
+                    if response is None:
+                        continue
+
+                    frame = _extract_camera_frame_bytes(self._pyddlvector, response)
+                    if frame is None:
+                        continue
+
+                    # Keep only newest frame to prevent queue/latency buildup.
+                    self.camera_frame = frame
+                    self.camera_frame_updated_monotonic = time.monotonic()
+                    self._camera_frame_event.set()
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:
+                if _is_unauthenticated_error(err):
+                    await self._async_handle_auth_failure("camera stream", err)
+                    continue
+                await asyncio.sleep(_CAMERA_RECONNECT_DELAY_SECONDS)
+            finally:
+                if stream is not None:
+                    stream.cancel()
+
     def _update_stimulation_from_event(self, stimulation_info: Any) -> bool:
         pyddlvector = self._pyddlvector
         if pyddlvector is not None and hasattr(pyddlvector, "parse_stimulation_info"):
@@ -433,6 +531,37 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         ) = next_snapshot
         return True
 
+    async def _async_handle_auth_failure(self, source: str, err: Exception) -> None:
+        async with self._auth_backoff_lock:
+            delay = self._auth_backoff_delay_seconds
+            self._auth_backoff_delay_seconds = min(
+                self._auth_backoff_delay_seconds * 2,
+                _AUTH_BACKOFF_MAX_DELAY_SECONDS,
+            )
+
+        _LOGGER.warning(
+            "Vector %s authentication failed; backing off for %.0fs: %s",
+            source,
+            delay,
+            err,
+        )
+        await self._async_reset_client(clear_robot_config=True)
+        await asyncio.sleep(delay)
+
+    async def _async_reset_client(self, *, clear_robot_config: bool) -> None:
+        client = self._client
+        self._client = None
+        if clear_robot_config:
+            self._robot_config = None
+
+        if client is not None:
+            try:
+                await client.disconnect()
+            except Exception:
+                _LOGGER.debug(
+                    "Vector client disconnect during reset failed", exc_info=True
+                )
+
     async def _async_get_runtime_robot_config(
         self, pyddlvector: Any, messaging: Any
     ) -> Any:
@@ -444,20 +573,19 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         host = (entry_data.get(CONF_HOST) or "").strip()
         robot_name = (entry_data.get(CONF_ROBOT_NAME) or "").strip()
         serial = (entry_data.get(CONF_SERIAL) or "").strip() or None
+        email = (entry_data.get(CONF_EMAIL) or "").strip() or None
+        password = (entry_data.get(CONF_PASSWORD) or "").strip() or None
 
         if not host or not robot_name:
             raise ValueError("Missing required robot identity values in config entry")
-        if not serial:
-            _LOGGER.warning(
-                "Vector config entry is missing serial; manufacturer/generation detection may be incorrect. "
-                "Reconfigure the integration and set serial."
-            )
-
+        mode = _resolve_provision_mode(serial=serial, email=email, password=password)
         robot_config = await pyddlvector.provision_runtime_robot(
-            mode="wirepod",
+            mode=mode,
             name=robot_name,
             ip=host,
             serial=serial,
+            username=email,
+            password=password,
             stub_factory=lambda channel: messaging.client.ExternalInterfaceStub(
                 channel
             ),
@@ -597,3 +725,45 @@ def _normalize_stimulation_snapshot(
         float(getattr(stimulation_info, "max_value", 0.0)),
         emotion_events,
     )
+
+
+def _extract_camera_frame_bytes(pyddlvector: Any | None, response: Any) -> bytes | None:
+    if pyddlvector is not None and hasattr(pyddlvector, "extract_camera_frame"):
+        parsed = pyddlvector.extract_camera_frame(response)
+        if parsed is not None:
+            return bytes(getattr(parsed, "data", b""))
+
+    image_encoding = int(getattr(response, "image_encoding", -1))
+    if image_encoding not in {6, 7, 8, 9, 10}:
+        return None
+    data = bytes(getattr(response, "data", b""))
+    return data or None
+
+
+def _is_unauthenticated_error(err: Exception) -> bool:
+    status_code = getattr(err, "status_code", None)
+    if status_code is not None and str(status_code).endswith("UNAUTHENTICATED"):
+        return True
+
+    details = str(err).upper()
+    return "UNAUTHENTICATED" in details or "STATUS: 401" in details
+
+
+def _resolve_provision_mode(
+    *,
+    serial: str | None,
+    email: str | None,
+    password: str | None,
+) -> str:
+    if not serial:
+        raise ValueError("Serial is required")
+
+    has_email = bool(email)
+    has_password = bool(password)
+
+    if has_email or has_password:
+        if not (has_email and has_password):
+            raise ValueError("Official mode requires both email and password")
+        return "official"
+
+    return "wirepod"

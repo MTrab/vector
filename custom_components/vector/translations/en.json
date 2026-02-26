@@ -1,5 +1,10 @@
 {
   "entity": {
+    "camera": {
+      "vision": {
+        "name": "Vision"
+      }
+    },
     "select": {
       "master_volume": {
         "name": "Volume",
@@ -51,17 +56,21 @@
     "step": {
       "user": {
         "title": "Set up Vector",
-        "description": "Enter your Vector robot details.",
+        "description": "Choose one mode only.\n\nHost and Serial are required in all modes because Home Assistant connects directly to the robot on your local network and Serial is used for provisioning and correct robot generation detection.\n\nEscapePod/Wire-pod mode: Fill Robot name, Host, and Serial.\n\nDDL cloud mode: Fill Robot name, Host, Serial, Email, and Password. Email/Password are only used to fetch cloud auth data; the robot connection is still local via Host.\n\nOnly fill Email and Password for DDL cloud mode. Leave both empty for EscapePod/Wire-pod mode.",
         "data": {
           "robot_name": "Robot name",
-          "host": "Robot IP address or hostname",
-          "serial": "Serial number (optional)"
+          "host": "Robot IP address or hostname (required)",
+          "serial": "Serial number (required)",
+          "email": "Email (DDL cloud only)",
+          "password": "Password (DDL cloud only)"
         }
       }
     },
     "error": {
       "invalid_robot_name": "Robot name must match Vector-ABCD format.",
-      "invalid_host": "Host must be a valid IP address or hostname."
+      "invalid_host": "Host must be a valid IP address or hostname.",
+      "serial_required": "Serial is required.",
+      "official_credentials_incomplete": "For DDL cloud mode, both Email and Password are required."
     },
     "abort": {
       "already_configured": "This Vector robot is already configured.",

@@ -7,8 +7,11 @@ from types import SimpleNamespace
 from custom_components.vector.coordinator import (
     _battery_percentage_from_wirepod_curve,
     _derive_activity_from_robot_state,
+    _extract_camera_frame_bytes,
+    _is_unauthenticated_error,
     _normalize_stimulation_snapshot,
     _normalize_battery_level_name,
+    _resolve_provision_mode,
 )
 
 
@@ -73,3 +76,79 @@ def test_normalize_stimulation_snapshot() -> None:
     snapshot = _normalize_stimulation_snapshot(payload)
 
     assert snapshot == (0.42, 0.11, -0.03, 0.39, 0.0, 1.0, ("Frustrated", "Excited"))
+
+
+def test_extract_camera_frame_bytes_fallback_jpeg() -> None:
+    """JPEG encodings should be extracted even without module helper."""
+    response = SimpleNamespace(image_encoding=7, data=b"\xff\xd8\xff")
+    assert _extract_camera_frame_bytes(None, response) == b"\xff\xd8\xff"
+
+
+def test_is_unauthenticated_error_from_string() -> None:
+    """Authentication failures should be recognized from exception text."""
+    err = RuntimeError(
+        "status = StatusCode.UNAUTHENTICATED details = Received http2 header with status: 401"
+    )
+    assert _is_unauthenticated_error(err) is True
+
+
+def test_resolve_provision_mode_wirepod_by_default() -> None:
+    """Without credentials, serial still produces wire-pod mode."""
+    assert (
+        _resolve_provision_mode(serial="00abc123", email=None, password=None)
+        == "wirepod"
+    )
+
+
+def test_resolve_provision_mode_official_with_all_credentials() -> None:
+    """When email/password/serial are present we should use official mode."""
+    assert (
+        _resolve_provision_mode(
+            serial="00abc123",
+            email="user@example.com",
+            password="secret",
+        )
+        == "official"
+    )
+
+
+def test_resolve_provision_mode_rejects_partial_credentials() -> None:
+    """Email/password must be supplied together."""
+    try:
+        _resolve_provision_mode(
+            serial="00abc123",
+            email="user@example.com",
+            password=None,
+        )
+    except ValueError as err:
+        assert "email and password" in str(err).lower()
+    else:
+        raise AssertionError("Expected ValueError for partial official credentials")
+
+
+def test_resolve_provision_mode_rejects_missing_serial_in_official_mode() -> None:
+    """Serial is required in all modes."""
+    try:
+        _resolve_provision_mode(
+            serial=None,
+            email="user@example.com",
+            password="secret",
+        )
+    except ValueError as err:
+        assert "serial" in str(err).lower()
+    else:
+        raise AssertionError("Expected ValueError when official mode misses serial")
+
+
+def test_resolve_provision_mode_rejects_missing_serial_in_wirepod_mode() -> None:
+    """Wire-pod mode also requires serial."""
+    try:
+        _resolve_provision_mode(
+            serial=None,
+            email=None,
+            password=None,
+        )
+    except ValueError as err:
+        assert "serial" in str(err).lower()
+    else:
+        raise AssertionError("Expected ValueError when wire-pod mode misses serial")
