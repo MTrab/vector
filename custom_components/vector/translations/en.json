@@ -56,17 +56,21 @@
     "step": {
       "user": {
         "title": "Set up Vector",
-        "description": "Enter your Vector robot details.",
+        "description": "Choose one mode only.\n\nFor EscapePod/Wire-pod: Fill Robot name and Host (Serial is optional).\n\nFor Digital Dream Labs cloud servers: Fill Robot name, Host, Serial, Email, and Password.\n\nOnly fill Email and Password when you want DDL cloud mode. Leave both empty for EscapePod/Wire-pod mode.",
         "data": {
           "robot_name": "Robot name",
           "host": "Robot IP address or hostname",
-          "serial": "Serial number (optional)"
+          "serial": "Serial number",
+          "email": "Email (DDL cloud only)",
+          "password": "Password (DDL cloud only)"
         }
       }
     },
     "error": {
       "invalid_robot_name": "Robot name must match Vector-ABCD format.",
-      "invalid_host": "Host must be a valid IP address or hostname."
+      "invalid_host": "Host must be a valid IP address or hostname.",
+      "official_credentials_incomplete": "For DDL cloud mode, both Email and Password are required.",
+      "serial_required_for_official": "Serial is required when using DDL cloud mode."
     },
     "abort": {
       "already_configured": "This Vector robot is already configured.",

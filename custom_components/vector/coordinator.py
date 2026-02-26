@@ -9,11 +9,12 @@ import time
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_UNKNOWN
+from homeassistant.const import CONF_PASSWORD, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    CONF_EMAIL,
     CONF_HOST,
     MASTER_VOLUME_OPTIONS,
     CONF_ROBOT_NAME,
@@ -573,10 +574,13 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         host = (entry_data.get(CONF_HOST) or "").strip()
         robot_name = (entry_data.get(CONF_ROBOT_NAME) or "").strip()
         serial = (entry_data.get(CONF_SERIAL) or "").strip() or None
+        email = (entry_data.get(CONF_EMAIL) or "").strip() or None
+        password = (entry_data.get(CONF_PASSWORD) or "").strip() or None
 
         if not host or not robot_name:
             raise ValueError("Missing required robot identity values in config entry")
-        if not serial and not self._warned_missing_serial:
+        mode = _resolve_provision_mode(serial=serial, email=email, password=password)
+        if mode == "wirepod" and not serial and not self._warned_missing_serial:
             self._warned_missing_serial = True
             _LOGGER.warning(
                 "Vector config entry is missing serial; manufacturer/generation detection may be incorrect. "
@@ -584,10 +588,12 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             )
 
         robot_config = await pyddlvector.provision_runtime_robot(
-            mode="wirepod",
+            mode=mode,
             name=robot_name,
             ip=host,
             serial=serial,
+            username=email,
+            password=password,
             stub_factory=lambda channel: messaging.client.ExternalInterfaceStub(
                 channel
             ),
@@ -749,3 +755,22 @@ def _is_unauthenticated_error(err: Exception) -> bool:
 
     details = str(err).upper()
     return "UNAUTHENTICATED" in details or "STATUS: 401" in details
+
+
+def _resolve_provision_mode(
+    *,
+    serial: str | None,
+    email: str | None,
+    password: str | None,
+) -> str:
+    has_email = bool(email)
+    has_password = bool(password)
+
+    if has_email or has_password:
+        if not (has_email and has_password):
+            raise ValueError("Official mode requires both email and password")
+        if not serial:
+            raise ValueError("Official mode requires serial")
+        return "official"
+
+    return "wirepod"
