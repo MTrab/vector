@@ -17,6 +17,7 @@ from custom_components.vector.sensor import (
     VectorDistanceMovedSensor,
     VectorReactedToTriggerWordSensor,
     VectorSecondsPettedSensor,
+    VectorStimulationSensor,
 )
 
 
@@ -36,6 +37,13 @@ class FakeCoordinator:
         reacted_to_trigger_word: int | None = None,
         seconds_petted: int | None = None,
         distance_moved_cm: int | None = None,
+        stimulation_value: float | None = None,
+        stimulation_velocity: float | None = None,
+        stimulation_accel: float | None = None,
+        stimulation_value_before_event: float | None = None,
+        stimulation_min_value: float | None = None,
+        stimulation_max_value: float | None = None,
+        stimulation_emotion_events: tuple[str, ...] = (),
     ) -> None:
         """Initialize coordinator stub."""
         self.current_activity = current_activity
@@ -49,6 +57,13 @@ class FakeCoordinator:
         self.reacted_to_trigger_word = reacted_to_trigger_word
         self.seconds_petted = seconds_petted
         self.distance_moved_cm = distance_moved_cm
+        self.stimulation_value = stimulation_value
+        self.stimulation_velocity = stimulation_velocity
+        self.stimulation_accel = stimulation_accel
+        self.stimulation_value_before_event = stimulation_value_before_event
+        self.stimulation_min_value = stimulation_min_value
+        self.stimulation_max_value = stimulation_max_value
+        self.stimulation_emotion_events = stimulation_emotion_events
 
     def async_add_listener(self, update_callback):
         """Match DataUpdateCoordinator listener contract."""
@@ -105,6 +120,33 @@ def test_battery_voltage_sensor_value_and_attributes() -> None:
         "battery_voltage": 3.92,
         "battery_level": "nominal",
         "charging": True,
+    }
+
+
+def test_stimulation_sensor_value_and_attributes() -> None:
+    """Stimulation sensor should expose value + stimulation attributes."""
+    coordinator = FakeCoordinator(
+        current_activity="idle",
+        stimulation_value=0.42,
+        stimulation_velocity=0.11,
+        stimulation_accel=-0.03,
+        stimulation_value_before_event=0.39,
+        stimulation_min_value=0.0,
+        stimulation_max_value=1.0,
+        stimulation_emotion_events=("Frustrated", "Excited"),
+    )
+    entry = _entry({CONF_ROBOT_NAME: "Vector-ABCD", CONF_HOST: "192.168.1.10"})
+
+    entity = VectorStimulationSensor(coordinator, entry)
+
+    assert entity.native_value == 0.42
+    assert entity.extra_state_attributes == {
+        "velocity": 0.11,
+        "accel": -0.03,
+        "value_before_event": 0.39,
+        "min_value": 0.0,
+        "max_value": 1.0,
+        "emotion_events": ["Frustrated", "Excited"],
     }
 
 

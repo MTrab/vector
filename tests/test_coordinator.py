@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from custom_components.vector.coordinator import (
     _battery_percentage_from_wirepod_curve,
     _derive_activity_from_robot_state,
+    _normalize_stimulation_snapshot,
     _normalize_battery_level_name,
 )
 
@@ -55,3 +56,20 @@ def test_battery_percentage_from_wirepod_curve() -> None:
     assert _battery_percentage_from_wirepod_curve(3.85) == 80
     assert _battery_percentage_from_wirepod_curve(3.50) == 0
     assert _battery_percentage_from_wirepod_curve(0.0) == 70
+
+
+def test_normalize_stimulation_snapshot() -> None:
+    """Stimulation payload should normalize into immutable snapshot tuple."""
+    payload = SimpleNamespace(
+        value=0.42,
+        velocity=0.11,
+        accel=-0.03,
+        value_before_event=0.39,
+        min_value=0.0,
+        max_value=1.0,
+        emotion_events=[" Frustrated ", "", "Excited"],
+    )
+
+    snapshot = _normalize_stimulation_snapshot(payload)
+
+    assert snapshot == (0.42, 0.11, -0.03, 0.39, 0.0, 1.0, ("Frustrated", "Excited"))

@@ -10,7 +10,7 @@
   "iot_class": "local_push",
   "version": "0.1.0",
   "requirements": [
-    "pyddlvector @ git+https://github.com/MTrab/pyddlvector.git@main"
+    "pyddlvector @ git+https://github.com/MTrab/pyddlvector.git@feature/stimulation-sensor"
   ],
   "dhcp": [
     {

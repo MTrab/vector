@@ -66,6 +66,13 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self.seconds_petted: int | None = None
         self.distance_moved_cm: int | None = None
         self.master_volume: str | None = None
+        self.stimulation_value: float | None = None
+        self.stimulation_velocity: float | None = None
+        self.stimulation_accel: float | None = None
+        self.stimulation_value_before_event: float | None = None
+        self.stimulation_min_value: float | None = None
+        self.stimulation_max_value: float | None = None
+        self.stimulation_emotion_events: tuple[str, ...] = ()
         self._client: Any | None = None
         self._robot_config: Any | None = None
         self._pyddlvector: Any | None = None
@@ -263,21 +270,26 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                         continue
 
                     event_type = event_response.event.WhichOneof("event_type")
-                    if event_type != "robot_state":
-                        continue
-
-                    robot_state = event_response.event.robot_state
                     reconnect_attempts = 0
-                    next_activity = _derive_activity_from_robot_state(robot_state)
-                    next_charging = _charging_from_robot_state(robot_state)
 
                     has_changes = False
-                    if next_activity != self.current_activity:
-                        self.current_activity = next_activity
-                        has_changes = True
-                    if next_charging != self.is_charging:
-                        self.is_charging = next_charging
-                        has_changes = True
+                    if event_type == "robot_state":
+                        robot_state = event_response.event.robot_state
+                        next_activity = _derive_activity_from_robot_state(robot_state)
+                        next_charging = _charging_from_robot_state(robot_state)
+
+                        if next_activity != self.current_activity:
+                            self.current_activity = next_activity
+                            has_changes = True
+                        if next_charging != self.is_charging:
+                            self.is_charging = next_charging
+                            has_changes = True
+                    elif event_type == "stimulation_info":
+                        has_changes = self._update_stimulation_from_event(
+                            event_response.event.stimulation_info
+                        )
+                    else:
+                        continue
 
                     if has_changes:
                         self.async_set_updated_data(None)
@@ -381,6 +393,45 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             )
             self.master_volume = str(selected).strip().lower()
             self.async_set_updated_data(None)
+
+    def _update_stimulation_from_event(self, stimulation_info: Any) -> bool:
+        pyddlvector = self._pyddlvector
+        if pyddlvector is not None and hasattr(pyddlvector, "parse_stimulation_info"):
+            parsed = pyddlvector.parse_stimulation_info(stimulation_info)
+            next_snapshot = (
+                float(parsed.value),
+                float(parsed.velocity),
+                float(parsed.accel),
+                float(parsed.value_before_event),
+                float(parsed.min_value),
+                float(parsed.max_value),
+                tuple(str(event) for event in parsed.emotion_events),
+            )
+        else:
+            next_snapshot = _normalize_stimulation_snapshot(stimulation_info)
+
+        current_snapshot = (
+            self.stimulation_value,
+            self.stimulation_velocity,
+            self.stimulation_accel,
+            self.stimulation_value_before_event,
+            self.stimulation_min_value,
+            self.stimulation_max_value,
+            self.stimulation_emotion_events,
+        )
+        if current_snapshot == next_snapshot:
+            return False
+
+        (
+            self.stimulation_value,
+            self.stimulation_velocity,
+            self.stimulation_accel,
+            self.stimulation_value_before_event,
+            self.stimulation_min_value,
+            self.stimulation_max_value,
+            self.stimulation_emotion_events,
+        ) = next_snapshot
+        return True
 
     async def _async_get_runtime_robot_config(
         self, pyddlvector: Any, messaging: Any
@@ -525,3 +576,24 @@ def _battery_percentage_from_wirepod_curve(voltage: float) -> int:
 
     bounded = max(0, min(100, round(percentage)))
     return int(bounded)
+
+
+def _normalize_stimulation_snapshot(
+    stimulation_info: Any,
+) -> tuple[float, float, float, float, float, float, tuple[str, ...]]:
+    emotion_events_raw = getattr(stimulation_info, "emotion_events", ())
+    emotion_events = tuple(
+        event.strip()
+        for event in emotion_events_raw
+        if isinstance(event, str) and event.strip()
+    )
+
+    return (
+        float(getattr(stimulation_info, "value", 0.0)),
+        float(getattr(stimulation_info, "velocity", 0.0)),
+        float(getattr(stimulation_info, "accel", 0.0)),
+        float(getattr(stimulation_info, "value_before_event", 0.0)),
+        float(getattr(stimulation_info, "min_value", 0.0)),
+        float(getattr(stimulation_info, "max_value", 0.0)),
+        emotion_events,
+    )

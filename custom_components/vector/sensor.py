@@ -28,6 +28,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             VectorCurrentActivitySensor(coordinator, entry),
+            VectorStimulationSensor(coordinator, entry),
             VectorBatterySensor(coordinator, entry),
             VectorDaysAliveSensor(coordinator, entry),
             VectorReactedToTriggerWordSensor(coordinator, entry),
@@ -93,6 +94,37 @@ class VectorBatterySensor(VectorEntity, SensorEntity):
             "battery_voltage": self.coordinator.battery_volts,
             "battery_level": self.coordinator.battery_level,
             "charging": self.coordinator.is_charging,
+        }
+
+
+class VectorStimulationSensor(VectorEntity, SensorEntity):
+    """Stimulation sensor for Vector."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "stimulation"
+    _attr_icon = "mdi:heart-pulse"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: VectorCoordinator, entry: ConfigEntry) -> None:
+        """Initialize stimulation sensor."""
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_stimulation"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return stimulation value."""
+        return self.coordinator.stimulation_value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, float | list[str] | None]:
+        """Return stimulation metadata."""
+        return {
+            "velocity": self.coordinator.stimulation_velocity,
+            "accel": self.coordinator.stimulation_accel,
+            "value_before_event": self.coordinator.stimulation_value_before_event,
+            "min_value": self.coordinator.stimulation_min_value,
+            "max_value": self.coordinator.stimulation_max_value,
+            "emotion_events": list(self.coordinator.stimulation_emotion_events),
         }
 
 

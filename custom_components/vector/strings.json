@@ -14,6 +14,9 @@
       }
     },
     "sensor": {
+      "stimulation": {
+        "name": "Stimulation"
+      },
       "battery": {
         "name": "Battery"
       },
