@@ -56,11 +56,11 @@
     "step": {
       "user": {
         "title": "Set up Vector",
-        "description": "Choose one mode only.\n\nFor EscapePod/Wire-pod: Fill Robot name and Host (Serial is optional).\n\nFor Digital Dream Labs cloud servers: Fill Robot name, Host, Serial, Email, and Password.\n\nOnly fill Email and Password when you want DDL cloud mode. Leave both empty for EscapePod/Wire-pod mode.",
+        "description": "Choose one mode only.\n\nHost is required in all modes because Home Assistant connects directly to the robot on your local network.\n\nEscapePod/Wire-pod mode: Fill Robot name and Host. Serial is optional.\n\nDDL cloud mode: Fill Robot name, Host, Serial, Email, and Password. Email/Password are only used to fetch cloud auth data; the robot connection is still local via Host.\n\nOnly fill Email and Password for DDL cloud mode. Leave both empty for EscapePod/Wire-pod mode.",
         "data": {
           "robot_name": "Robot name",
-          "host": "Robot IP address or hostname",
-          "serial": "Serial number",
+          "host": "Robot IP address or hostname (required)",
+          "serial": "Serial number (required for DDL cloud)",
           "email": "Email (DDL cloud only)",
           "password": "Password (DDL cloud only)"
         }
