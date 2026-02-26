@@ -98,7 +98,7 @@ To enable them:
 
 ## Known Status
 
-This project is under active development. Behavior and exposed entities may improve between releases.
+This project is under active development. Behavior and exposed entities may improve or change between releases.
 
 ## Support
 
