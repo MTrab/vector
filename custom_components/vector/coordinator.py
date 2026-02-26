@@ -25,13 +25,15 @@ _LOGGER = logging.getLogger(__name__)
 _DEFAULT_TIMEOUT_SECONDS = 10.0
 _MAX_EVENT_READS = 10
 _STREAM_READ_TIMEOUT_SECONDS = 120.0
-_MAX_STREAM_RECONNECT_ATTEMPTS = 5
 _STREAM_RECONNECT_DELAY_SECONDS = 3.0
 _INITIAL_REFRESH_TIMEOUT_SECONDS = 20.0
 _INITIAL_REFRESH_RETRY_ATTEMPTS = 5
 _INITIAL_REFRESH_RETRY_DELAY_SECONDS = 3.0
+_INITIAL_REFRESH_MAX_RETRY_DELAY_SECONDS = 60.0
 _CAMERA_STREAM_READ_TIMEOUT_SECONDS = 30.0
 _CAMERA_RECONNECT_DELAY_SECONDS = 2.0
+_AUTH_BACKOFF_BASE_DELAY_SECONDS = 15.0
+_AUTH_BACKOFF_MAX_DELAY_SECONDS = 300.0
 
 _STATUS_IS_MOVING = 0x1
 _STATUS_IS_CARRYING_BLOCK = 0x2
@@ -88,6 +90,8 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self._camera_frame_event = asyncio.Event()
         self._settings_lock = asyncio.Lock()
         self._warned_missing_serial = False
+        self._auth_backoff_delay_seconds = _AUTH_BACKOFF_BASE_DELAY_SECONDS
+        self._auth_backoff_lock = asyncio.Lock()
 
     async def _async_update_data(self) -> None:
         """Do initial one-shot load at setup."""
@@ -123,6 +127,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             self.distance_moved_cm = lifetime_stats.distance_moved_cm
         self.master_volume = master_volume
         self.current_activity = activity
+        self._auth_backoff_delay_seconds = _AUTH_BACKOFF_BASE_DELAY_SECONDS
         return None
 
     async def async_start_event_listener(self) -> None:
@@ -139,6 +144,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
 
     async def async_start_runtime(self) -> None:
         """Initialize runtime data and start push listener without blocking HA startup."""
+        retry_delay = _INITIAL_REFRESH_RETRY_DELAY_SECONDS
         for attempt in range(1, _INITIAL_REFRESH_RETRY_ATTEMPTS + 1):
             try:
                 await asyncio.wait_for(
@@ -153,6 +159,12 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                     _INITIAL_REFRESH_RETRY_ATTEMPTS,
                 )
             except Exception as err:
+                if _is_unauthenticated_error(err):
+                    await self._async_handle_auth_failure(
+                        "initial refresh",
+                        err,
+                    )
+                    continue
                 _LOGGER.warning(
                     "Initial Vector refresh failed (attempt %s/%s): %s",
                     attempt,
@@ -172,7 +184,11 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 )
 
             if attempt < _INITIAL_REFRESH_RETRY_ATTEMPTS:
-                await asyncio.sleep(_INITIAL_REFRESH_RETRY_DELAY_SECONDS)
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(
+                    retry_delay * 2,
+                    _INITIAL_REFRESH_MAX_RETRY_DELAY_SECONDS,
+                )
 
         await self.async_start_event_listener()
 
@@ -265,8 +281,6 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
 
     async def _async_event_listener_loop(self) -> None:
         """Keep a persistent event stream open and push updates to entities."""
-        reconnect_attempts = 0
-
         while True:
             stream = None
             try:
@@ -288,7 +302,6 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                         continue
 
                     event_type = event_response.event.WhichOneof("event_type")
-                    reconnect_attempts = 0
 
                     has_changes = False
                     if event_type == "robot_state":
@@ -314,19 +327,13 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             except asyncio.CancelledError:
                 raise
             except Exception as err:
-                reconnect_attempts += 1
+                if _is_unauthenticated_error(err):
+                    await self._async_handle_auth_failure("event stream", err)
+                    continue
                 _LOGGER.warning(
-                    "Vector event stream interrupted (%s/%s): %s",
-                    reconnect_attempts,
-                    _MAX_STREAM_RECONNECT_ATTEMPTS,
+                    "Vector event stream interrupted: %s",
                     err,
                 )
-                if reconnect_attempts >= _MAX_STREAM_RECONNECT_ATTEMPTS:
-                    _LOGGER.error(
-                        "Vector event stream stopped after %s consecutive failures",
-                        _MAX_STREAM_RECONNECT_ATTEMPTS,
-                    )
-                    return
                 await asyncio.sleep(_STREAM_RECONNECT_DELAY_SECONDS)
             finally:
                 if stream is not None:
@@ -473,11 +480,8 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 raise
             except Exception as err:
                 if _is_unauthenticated_error(err):
-                    _LOGGER.warning(
-                        "Vector camera stream stopped due to authentication error: %s",
-                        err,
-                    )
-                    return
+                    await self._async_handle_auth_failure("camera stream", err)
+                    continue
                 _LOGGER.debug("Vector camera stream interrupted: %s", err)
                 await asyncio.sleep(_CAMERA_RECONNECT_DELAY_SECONDS)
             finally:
@@ -522,6 +526,37 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             self.stimulation_emotion_events,
         ) = next_snapshot
         return True
+
+    async def _async_handle_auth_failure(self, source: str, err: Exception) -> None:
+        async with self._auth_backoff_lock:
+            delay = self._auth_backoff_delay_seconds
+            self._auth_backoff_delay_seconds = min(
+                self._auth_backoff_delay_seconds * 2,
+                _AUTH_BACKOFF_MAX_DELAY_SECONDS,
+            )
+
+        _LOGGER.warning(
+            "Vector %s authentication failed; backing off for %.0fs: %s",
+            source,
+            delay,
+            err,
+        )
+        await self._async_reset_client(clear_robot_config=True)
+        await asyncio.sleep(delay)
+
+    async def _async_reset_client(self, *, clear_robot_config: bool) -> None:
+        client = self._client
+        self._client = None
+        if clear_robot_config:
+            self._robot_config = None
+
+        if client is not None:
+            try:
+                await client.disconnect()
+            except Exception:
+                _LOGGER.debug(
+                    "Vector client disconnect during reset failed", exc_info=True
+                )
 
     async def _async_get_runtime_robot_config(
         self, pyddlvector: Any, messaging: Any
