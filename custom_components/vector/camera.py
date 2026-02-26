@@ -39,9 +39,9 @@ class VectorVisionCamera(VectorEntity, Camera):
         self._assets = VectorAssetHandler()
 
     async def async_added_to_hass(self) -> None:
-        """Start camera stream lazily when entity is added."""
+        """Prepare bundled fallback assets."""
         await super().async_added_to_hass()
-        await self.coordinator.async_start_camera_stream()
+        await self._assets.async_prepare(self.hass)
 
     async def async_camera_image(
         self,

@@ -87,6 +87,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self._camera_stream_lock = asyncio.Lock()
         self._camera_frame_event = asyncio.Event()
         self._settings_lock = asyncio.Lock()
+        self._warned_missing_serial = False
 
     async def _async_update_data(self) -> None:
         """Do initial one-shot load at setup."""
@@ -471,6 +472,12 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             except asyncio.CancelledError:
                 raise
             except Exception as err:
+                if _is_unauthenticated_error(err):
+                    _LOGGER.warning(
+                        "Vector camera stream stopped due to authentication error: %s",
+                        err,
+                    )
+                    return
                 _LOGGER.debug("Vector camera stream interrupted: %s", err)
                 await asyncio.sleep(_CAMERA_RECONNECT_DELAY_SECONDS)
             finally:
@@ -530,7 +537,8 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
 
         if not host or not robot_name:
             raise ValueError("Missing required robot identity values in config entry")
-        if not serial:
+        if not serial and not self._warned_missing_serial:
+            self._warned_missing_serial = True
             _LOGGER.warning(
                 "Vector config entry is missing serial; manufacturer/generation detection may be incorrect. "
                 "Reconfigure the integration and set serial."
@@ -693,3 +701,12 @@ def _extract_camera_frame_bytes(pyddlvector: Any | None, response: Any) -> bytes
         return None
     data = bytes(getattr(response, "data", b""))
     return data or None
+
+
+def _is_unauthenticated_error(err: Exception) -> bool:
+    status_code = getattr(err, "status_code", None)
+    if status_code is not None and str(status_code).endswith("UNAUTHENTICATED"):
+        return True
+
+    details = str(err).upper()
+    return "UNAUTHENTICATED" in details or "STATUS: 401" in details

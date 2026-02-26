@@ -8,6 +8,7 @@ from custom_components.vector.coordinator import (
     _battery_percentage_from_wirepod_curve,
     _derive_activity_from_robot_state,
     _extract_camera_frame_bytes,
+    _is_unauthenticated_error,
     _normalize_stimulation_snapshot,
     _normalize_battery_level_name,
 )
@@ -80,3 +81,11 @@ def test_extract_camera_frame_bytes_fallback_jpeg() -> None:
     """JPEG encodings should be extracted even without module helper."""
     response = SimpleNamespace(image_encoding=7, data=b"\xff\xd8\xff")
     assert _extract_camera_frame_bytes(None, response) == b"\xff\xd8\xff"
+
+
+def test_is_unauthenticated_error_from_string() -> None:
+    """Authentication failures should be recognized from exception text."""
+    err = RuntimeError(
+        "status = StatusCode.UNAUTHENTICATED details = Received http2 header with status: 401"
+    )
+    assert _is_unauthenticated_error(err) is True
