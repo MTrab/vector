@@ -8,11 +8,17 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_HOST
+from homeassistant.const import CONF_HOST, CONF_PASSWORD
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
-from .const import CONF_ROBOT_NAME, CONF_SERIAL, DOMAIN, VECTOR_NAME_PREFIX
+from .const import (
+    CONF_EMAIL,
+    CONF_ROBOT_NAME,
+    CONF_SERIAL,
+    DOMAIN,
+    VECTOR_NAME_PREFIX,
+)
 
 VECTOR_HOSTNAME_RE = re.compile(r"^Vector-[A-Za-z0-9]{4,}$", re.IGNORECASE)
 HOST_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.-]{0,252}[A-Za-z0-9]$")
@@ -21,7 +27,9 @@ USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_ROBOT_NAME): str,
         vol.Required(CONF_HOST): str,
-        vol.Optional(CONF_SERIAL): str,
+        vol.Required(CONF_SERIAL): str,
+        vol.Optional(CONF_EMAIL): str,
+        vol.Optional(CONF_PASSWORD): str,
     }
 )
 
@@ -66,11 +74,17 @@ class VectorConfigFlow(ConfigFlow, domain=DOMAIN):
             robot_name = user_input[CONF_ROBOT_NAME].strip()
             host = user_input[CONF_HOST].strip()
             serial = user_input.get(CONF_SERIAL, "").strip().lower() or None
+            email = user_input.get(CONF_EMAIL, "").strip() or None
+            password = user_input.get(CONF_PASSWORD, "").strip() or None
 
             if not VECTOR_HOSTNAME_RE.match(robot_name):
                 errors["base"] = "invalid_robot_name"
             elif not self._is_valid_host(host):
                 errors["base"] = "invalid_host"
+            elif not serial:
+                errors["base"] = "serial_required"
+            elif bool(email) != bool(password):
+                errors["base"] = "official_credentials_incomplete"
 
             if not errors:
                 unique_host = serial if serial else host
@@ -85,6 +99,10 @@ class VectorConfigFlow(ConfigFlow, domain=DOMAIN):
                 }
                 if serial:
                     data[CONF_SERIAL] = serial
+                if email:
+                    data[CONF_EMAIL] = email
+                if password:
+                    data[CONF_PASSWORD] = password
 
                 return self.async_create_entry(title=robot_name, data=data)
 

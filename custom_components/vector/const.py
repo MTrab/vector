@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 DOMAIN = "vector"
-PLATFORMS: list[str] = ["sensor", "select"]
+PLATFORMS: list[str] = ["sensor", "select", "camera"]
 
 CONF_HOST = "host"
 CONF_ROBOT_NAME = "robot_name"
 CONF_SERIAL = "serial"
+CONF_EMAIL = "email"
 
 VECTOR_NAME_PREFIX = "Vector-"
 
