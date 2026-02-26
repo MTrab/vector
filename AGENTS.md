@@ -40,10 +40,10 @@ If there is uncertainty, stop and request clarification.
 
 (Adjust once the structure is finalized.)
 
-- `src/` — Core integration logic
+- `custom_components/vector` — Core integration logic
 - `tests/` — Unit and integration tests
 - `docs/` — Protocol documentation, architecture notes
-- `scripts/` — Development utilities
+- `scripts/` — Development utilities, mostly for running Home Assistant tasks
 - `proto/` or `anki_vector/messaging/` — Protobuf definitions (if applicable)
 
 If the repository becomes a monorepo, additional `AGENTS.md` files may exist in subdirectories with scoped instructions.
@@ -138,6 +138,20 @@ If certificates or tokens are required:
 - Do not introduce large refactors in the same change as functional modifications unless explicitly requested.
 - Keep commits small and focused.
 - Avoid introducing new dependencies unless justified.
+
+## Home Assistant Compliance
+
+The integration MUST comply with Home Assistant integration standards and developer guidelines.
+
+The agent must:
+
+- Follow Home Assistant architecture patterns for config entries, setup/unload flows, and platform forwarding.
+- Implement entities according to Home Assistant entity model conventions (state, availability, device info, unique IDs, and naming).
+- Use `DataUpdateCoordinator` where periodic or shared polling is required.
+- Provide and maintain `config_flow`, diagnostics/repair handling (when relevant), and translations.
+- Keep `manifest.json`, services, and supported features aligned with Home Assistant requirements.
+- Ensure changes target and maintain at least Home Assistant Silver quality expectations, and move toward Gold where feasible.
+- Add or update tests for behavior changes, especially setup, coordinator behavior, and entity state handling.
 
 ---
 
