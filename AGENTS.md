@@ -44,9 +44,38 @@ If there is uncertainty, stop and request clarification.
 - `tests/` — Unit and integration tests
 - `docs/` — Protocol documentation, architecture notes
 - `scripts/` — Development utilities, mostly for running Home Assistant tasks
-- `proto/` or `anki_vector/messaging/` — Protobuf definitions (if applicable)
 
 If the repository becomes a monorepo, additional `AGENTS.md` files may exist in subdirectories with scoped instructions.
+
+## External Module Repository
+
+The Python communication module source code is maintained in:
+
+- `/development/github/homeassistant/pyddlvector`
+
+From this workspace, the agent has access to work in that repository as well, including creating branches, making edits, committing, and pushing.
+
+All module changes MUST be made in dedicated branches intended for merge (no direct commits to main/master), so full change tracking is preserved.
+
+When testing integration changes in this repository that depend on in-progress `pyddlvector` module changes, the agent MUST update `custom_components/vector/manifest.json` to point to the specific `pyddlvector` branch being used for that test cycle.
+
+## Reference Source (Ideas and Code)
+
+The agent may use the following project as a technical reference for ideas and implementation patterns:
+
+- https://github.com/kercre123/wire-pod
+
+Reference use means:
+
+- Compare protocol behavior and integration approaches
+- Reuse concepts selectively where they improve quality and maintainability
+- Validate assumptions against known working implementations
+
+Reference use does NOT mean:
+
+- Blind copying of architecture or legacy patterns
+- Copying code without adapting it to Home Assistant standards and this repository's constraints
+- Bypassing security, async, or quality requirements defined in this document
 
 ---
 
@@ -57,49 +86,7 @@ The agent must use the exact versions defined in the project configuration files
 ### Requirements
 
 - OS: (Specify if restricted)
-- Runtime: (e.g., Python X.Y / Node X / .NET X)
-- Package manager: (pip / poetry / uv / npm / pnpm / etc.)
-- Docker: `docker compose` (v2 syntax only)
-
-### Install
-
-```bash
-<INSERT INSTALL COMMANDS>
-```
-
-### Run Locally
-
-```bash
-<INSERT RUN COMMANDS>
-```
-
-### Lint / Format
-
-```bash
-<INSERT LINT COMMANDS>
-```
-
-### Tests
-
-Quick tests:
-
-```bash
-<INSERT TEST COMMAND>
-```
-
-Full test suite:
-
-```bash
-<INSERT TEST COMMAND>
-```
-
-CI-equivalent local check:
-
-```bash
-<INSERT COMMAND>
-```
-
----
+- Runtime: Python 3.13
 
 ## Vector Robot Integration Rules
 
@@ -129,6 +116,7 @@ If certificates or tokens are required:
 - Prefer structured errors where applicable.
 - Fail explicitly rather than silently ignoring errors.
 - Surface actionable error messages.
+- ALWAYS test for race conditions in relevant async/concurrent flows before considering a change complete.
 
 ---
 
@@ -138,6 +126,7 @@ If certificates or tokens are required:
 - Do not introduce large refactors in the same change as functional modifications unless explicitly requested.
 - Keep commits small and focused.
 - Avoid introducing new dependencies unless justified.
+- Use `ruff` as formatter/linter in this repository.
 
 ## Home Assistant Compliance
 
