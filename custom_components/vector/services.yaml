@@ -1,0 +1,18 @@
+tts:
+  target:
+    entity:
+      integration: vector
+  fields:
+    message:
+      name: Message
+      description: Message for Vector to say
+      required: true
+      selector:
+        text:
+    use_vector_voice:
+      name: Use Vectors voice?
+      description: Use Vectors own voice?
+      required: true
+      default: true
+      selector:
+        boolean:

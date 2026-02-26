@@ -1,0 +1,56 @@
+{
+    "good": [
+        "good",
+        "great",
+        "very good",
+        "wonderful",
+        "lovely",
+        "charming",
+        "nice",
+        "enjoyable",
+        "incredible",
+        "remarkable",
+        "fabulous",
+        "pleasant",
+        "fantastic"
+    ],
+    "weird": [
+        "weird",
+        "odd",
+        "strange",
+        "very weird",
+        "crazy",
+        "bizarre",
+        "remarkable",
+        "outlandish",
+        "different",
+        "random",
+        "curious",
+        "freaky"
+    ],
+    "scary": [
+        "scary",
+        "frightening",
+        "very scary",
+        "terrifying",
+        "alarming",
+        "daunting",
+        "frightful",
+        "grim",
+        "harrowing",
+        "shocking"
+    ],
+    "interesting": [
+        "interesting",
+        "weird",
+        "strange",
+        "curious",
+        "fascinating",
+        "intriguing",
+        "provocative",
+        "thought-provoking",
+        "unusual",
+        "captivating",
+        "amazing"
+    ]
+}

@@ -1,0 +1,113 @@
+"""Base definitions."""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import timedelta
+from functools import partial
+
+from ha_vector.exceptions import VectorAsyncException, VectorTimeoutException
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import STATE_UNKNOWN
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from .const import DOMAIN, STATE_FIRMWARE_VERSION
+from .coordinator import VectorConnectionState, VectorDataUpdateCoordinator
+from .helpers import States
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def connect(self) -> bool:
+    """Open robot connection."""
+    _LOGGER.debug("Connecting to Vector")
+    try:
+        self.connection_state = VectorConnectionState.CONNECTING
+        self.robot.connect()
+        self.connection_state = VectorConnectionState.CONNECTED
+
+        return True
+    except VectorAsyncException:
+        _LOGGER.debug("Async exception, returning true anyway")
+        self.connection_state = VectorConnectionState.CONNECTED
+        return True
+    except VectorTimeoutException:
+        _LOGGER.warning("Timeout connecting to Vector, trying again later.")
+        self.connection_state = VectorConnectionState.DISCONNECTED
+        async_call_later(self.hass, timedelta(minutes=1), partial(self.connect))
+        return False
+
+
+@dataclass
+class VectorBaseEntityDescription:
+    """Describes a Vector sensor."""
+
+    start_value: str = STATE_UNKNOWN
+    value_fn: Callable[[States]] | str = start_value
+    attribute_fn: Callable[[States]] | str | None = None
+
+
+class VectorCubeBase(CoordinatorEntity[VectorDataUpdateCoordinator]):
+    """Defines a Vector Cube base class."""
+
+    def __init__(self, coordinator, cube_id: str) -> None:
+        """Initialise a Vector Cube base."""
+        super().__init__(coordinator)
+
+        self.coordinator: VectorDataUpdateCoordinator = coordinator
+        self.hass: HomeAssistant = coordinator.hass
+        self.cube_id = cube_id
+
+        self._identifiers = {(DOMAIN, f"cube_{cube_id}")}
+
+    @property
+    def device_info(self) -> dict:
+        """Set device information."""
+
+        device_info = {
+            "identifiers": self._identifiers,
+            "name": f"Vector Cube {self.cube_id}",
+            "model": "Vector Cube",
+        }
+
+        return device_info
+
+
+class VectorBase(CoordinatorEntity[VectorDataUpdateCoordinator]):
+    """Defines a Vector base class."""
+
+    def __init__(self, coordinator, identifiers: dict | None = None) -> None:
+        """Initialise a Vector base."""
+        super().__init__(coordinator)
+
+        self.coordinator: VectorDataUpdateCoordinator = coordinator
+        self.entry: ConfigEntry = coordinator.entry
+        self.hass: HomeAssistant = coordinator.hass
+
+        self._generation = "1.0" if self.coordinator.serial.startswith("00") else "2.0"
+        self._vendor = "Anki" if self._generation == "1.0" else "Digital Dream Labs"
+
+        self._identifiers = (
+            identifiers
+            if not isinstance(identifiers, type(None))
+            else {(DOMAIN, self.entry.entry_id, self.coordinator.friendly_name)}
+        )
+
+    @property
+    def device_info(self) -> dict:
+        """Set device information."""
+
+        return {
+            "identifiers": self._identifiers,
+            "name": str(self.coordinator.friendly_name),
+            "manufacturer": self._vendor,
+            "model": "Vector",
+            "sw_version": self.coordinator.states.get_robot_attributes(
+                STATE_FIRMWARE_VERSION
+            ),
+            "hw_version": self._generation,
+        }
