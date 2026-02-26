@@ -10,17 +10,17 @@
   "iot_class": "local_push",
   "version": "0.1.0",
   "requirements": [
-    "pyddlvector @ git+https://github.com/MTrab/pyddlvector.git@main"
+    "pyddlvector@git+https://github.com/MTrab/pyddlvector.git@main"
   ],
   "dhcp": [
     {
-      "hostname": "Vector-*"
+      "hostname": "vector-*"
     }
   ],
   "zeroconf": [
     {
       "type": "_tcp.local.",
-      "name": "Vector-*"
+      "name": "vector-*"
     }
   ]
 }
