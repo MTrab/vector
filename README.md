@@ -38,11 +38,22 @@ You can use either of these modes:
 ### ~~Option 1: HACS (recommended)~~
 
 ~~1. Open HACS in Home Assistant.~~
+
 ~~2. Add this repository as a custom repository (category: Integration).~~
+
 ~~3. Install `Vector`.~~
+
 ~~4. Restart Home Assistant.~~
 
-### Option 2: Manual
+### Option 2: HACS via manual custom repository
+
+1. Open HACS in Home Assistant.
+2. Go to the custom repositories section.
+3. Add `https://github.com/MTrab/vector` as category `Integration`.
+4. Find and install `Vector` in HACS.
+5. Restart Home Assistant.
+
+### Option 3: Manual file copy
 
 1. Copy `custom_components/vector` into your Home Assistant `custom_components` directory.
 2. Restart Home Assistant.
