@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from custom_components.vector.coordinator import (
     _battery_percentage_from_wirepod_curve,
     _derive_activity_from_robot_state,
+    _extract_camera_frame_bytes,
     _normalize_stimulation_snapshot,
     _normalize_battery_level_name,
 )
@@ -73,3 +74,9 @@ def test_normalize_stimulation_snapshot() -> None:
     snapshot = _normalize_stimulation_snapshot(payload)
 
     assert snapshot == (0.42, 0.11, -0.03, 0.39, 0.0, 1.0, ("Frustrated", "Excited"))
+
+
+def test_extract_camera_frame_bytes_fallback_jpeg() -> None:
+    """JPEG encodings should be extracted even without module helper."""
+    response = SimpleNamespace(image_encoding=7, data=b"\xff\xd8\xff")
+    assert _extract_camera_frame_bytes(None, response) == b"\xff\xd8\xff"

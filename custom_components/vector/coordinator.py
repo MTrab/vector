@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import time
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -29,6 +30,8 @@ _STREAM_RECONNECT_DELAY_SECONDS = 3.0
 _INITIAL_REFRESH_TIMEOUT_SECONDS = 20.0
 _INITIAL_REFRESH_RETRY_ATTEMPTS = 5
 _INITIAL_REFRESH_RETRY_DELAY_SECONDS = 3.0
+_CAMERA_STREAM_READ_TIMEOUT_SECONDS = 30.0
+_CAMERA_RECONNECT_DELAY_SECONDS = 2.0
 
 _STATUS_IS_MOVING = 0x1
 _STATUS_IS_CARRYING_BLOCK = 0x2
@@ -73,11 +76,16 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self.stimulation_min_value: float | None = None
         self.stimulation_max_value: float | None = None
         self.stimulation_emotion_events: tuple[str, ...] = ()
+        self.camera_frame: bytes | None = None
+        self.camera_frame_updated_monotonic: float | None = None
         self._client: Any | None = None
         self._robot_config: Any | None = None
         self._pyddlvector: Any | None = None
         self._messaging: Any | None = None
         self._event_listener_task: asyncio.Task[None] | None = None
+        self._camera_stream_task: asyncio.Task[None] | None = None
+        self._camera_stream_lock = asyncio.Lock()
+        self._camera_frame_event = asyncio.Event()
         self._settings_lock = asyncio.Lock()
 
     async def _async_update_data(self) -> None:
@@ -177,6 +185,15 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 pass
             finally:
                 self._event_listener_task = None
+
+        if self._camera_stream_task is not None:
+            self._camera_stream_task.cancel()
+            try:
+                await self._camera_stream_task
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self._camera_stream_task = None
 
         if self._client is None:
             return
@@ -394,6 +411,72 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             self.master_volume = str(selected).strip().lower()
             self.async_set_updated_data(None)
 
+    async def async_start_camera_stream(self) -> None:
+        """Ensure persistent camera stream task is running."""
+        async with self._camera_stream_lock:
+            if (
+                self._camera_stream_task is not None
+                and not self._camera_stream_task.done()
+            ):
+                return
+            self._camera_stream_task = self.hass.async_create_background_task(
+                self._async_camera_stream_loop(),
+                name=f"vector_camera_stream_{self.entry.entry_id}",
+            )
+
+    async def async_get_latest_camera_frame(
+        self,
+        *,
+        wait_timeout: float = 1.0,
+    ) -> bytes | None:
+        """Return latest JPEG frame, optionally waiting for first frame."""
+        await self.async_start_camera_stream()
+
+        if self.camera_frame is not None:
+            return self.camera_frame
+
+        try:
+            await asyncio.wait_for(
+                self._camera_frame_event.wait(), timeout=wait_timeout
+            )
+        except TimeoutError:
+            return None
+
+        return self.camera_frame
+
+    async def _async_camera_stream_loop(self) -> None:
+        """Keep persistent camera feed stream and cache latest frame."""
+        while True:
+            stream = None
+            try:
+                client, messaging = await self._async_get_client()
+                stream = client.stub.CameraFeed(messaging.protocol.CameraFeedRequest())
+
+                while True:
+                    response = await asyncio.wait_for(
+                        stream.read(),
+                        timeout=_CAMERA_STREAM_READ_TIMEOUT_SECONDS,
+                    )
+                    if response is None:
+                        continue
+
+                    frame = _extract_camera_frame_bytes(self._pyddlvector, response)
+                    if frame is None:
+                        continue
+
+                    # Keep only newest frame to prevent queue/latency buildup.
+                    self.camera_frame = frame
+                    self.camera_frame_updated_monotonic = time.monotonic()
+                    self._camera_frame_event.set()
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:
+                _LOGGER.debug("Vector camera stream interrupted: %s", err)
+                await asyncio.sleep(_CAMERA_RECONNECT_DELAY_SECONDS)
+            finally:
+                if stream is not None:
+                    stream.cancel()
+
     def _update_stimulation_from_event(self, stimulation_info: Any) -> bool:
         pyddlvector = self._pyddlvector
         if pyddlvector is not None and hasattr(pyddlvector, "parse_stimulation_info"):
@@ -597,3 +680,16 @@ def _normalize_stimulation_snapshot(
         float(getattr(stimulation_info, "max_value", 0.0)),
         emotion_events,
     )
+
+
+def _extract_camera_frame_bytes(pyddlvector: Any | None, response: Any) -> bytes | None:
+    if pyddlvector is not None and hasattr(pyddlvector, "extract_camera_frame"):
+        parsed = pyddlvector.extract_camera_frame(response)
+        if parsed is not None:
+            return bytes(getattr(parsed, "data", b""))
+
+    image_encoding = int(getattr(response, "image_encoding", -1))
+    if image_encoding not in {6, 7, 8, 9, 10}:
+        return None
+    data = bytes(getattr(response, "data", b""))
+    return data or None
