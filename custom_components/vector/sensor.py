@@ -46,6 +46,12 @@ class VectorCurrentActivitySensor(VectorEntity, SensorEntity):
     _attr_options = [
         "unknown",
         "sleeping",
+        "exploring",
+        "exploring_from_charger",
+        "looking_for_faces",
+        "looking_for_cubes",
+        "looking_for_objects",
+        # Backward-compatible fallback values used when tracker is unavailable.
         "moving",
         "being_touched",
         "carrying_object",

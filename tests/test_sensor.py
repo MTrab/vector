@@ -86,6 +86,19 @@ def test_current_activity_sensor_native_value() -> None:
     assert entity.native_value == "docking"
 
 
+def test_current_activity_sensor_options_include_new_tracker_states() -> None:
+    """Enum options must include normalized states emitted by activity tracker."""
+    coordinator = FakeCoordinator(current_activity="exploring_from_charger")
+    entry = _entry({CONF_ROBOT_NAME: "Vector-ABCD", CONF_HOST: "192.168.1.10"})
+
+    entity = VectorCurrentActivitySensor(coordinator, entry)
+
+    assert "exploring_from_charger" in entity.options
+    assert "looking_for_faces" in entity.options
+    assert "looking_for_cubes" in entity.options
+    assert "looking_for_objects" in entity.options
+
+
 def test_current_activity_sensor_device_identifier_prefers_serial() -> None:
     """Device identifiers should prefer robot serial when available."""
     coordinator = FakeCoordinator(current_activity="idle")
