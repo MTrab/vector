@@ -24,6 +24,23 @@ class FakeCoordinator:
         return None
 
 
+class FakeServices:
+    """Minimal services registry stub."""
+
+    def __init__(self) -> None:
+        self._services: dict[tuple[str, str], object] = {}
+
+    def has_service(self, domain: str, service: str) -> bool:
+        return (domain, service) in self._services
+
+    def async_register(self, domain: str, service: str, handler, schema=None) -> None:
+        del handler, schema
+        self._services[(domain, service)] = object()
+
+    def async_remove(self, domain: str, service: str) -> None:
+        self._services.pop((domain, service), None)
+
+
 def _hass() -> SimpleNamespace:
     """Create minimal hass stub for setup/unload tests."""
 
@@ -38,6 +55,7 @@ def _hass() -> SimpleNamespace:
             async_forward_entry_setups=AsyncMock(),
             async_unload_platforms=AsyncMock(return_value=True),
         ),
+        services=FakeServices(),
         async_create_background_task=_create_background_task,
     )
 

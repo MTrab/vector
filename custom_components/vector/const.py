@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from homeassistant.const import ATTR_ENTITY_ID
+
 DOMAIN = "vector"
 PLATFORMS: list[str] = ["sensor", "select", "button", "camera"]
 
@@ -38,3 +40,12 @@ QUICK_ACTION_INTENTS: dict[str, str] = {
     "dance": "intent_imperative_dance",
     "fetch_cube": "intent_imperative_fetchcube",
 }
+
+SERVICE_SAY_TEXT = "say_text"
+ATTR_ENTRY_ID = "entry_id"
+ATTR_TEXT = "text"
+ATTR_USE_VECTOR_VOICE = "use_vector_voice"
+ATTR_DURATION_SCALAR = "duration_scalar"
+ATTR_PITCH_SCALAR = "pitch_scalar"
+
+SAY_TEXT_FIELD_ENTITY_ID = ATTR_ENTITY_ID

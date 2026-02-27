@@ -37,6 +37,8 @@ _CAMERA_RECONNECT_DELAY_SECONDS = 2.0
 _AUTH_BACKOFF_BASE_DELAY_SECONDS = 15.0
 _AUTH_BACKOFF_MAX_DELAY_SECONDS = 300.0
 _APP_INTENT_RPC_PATH = "/Anki.Vector.external_interface.ExternalInterface/AppIntent"
+_SAY_TEXT_WAKE_WAIT_TIMEOUT_SECONDS = 120.0
+_SAY_TEXT_WAKE_POLL_INTERVAL_SECONDS = 2.0
 
 _STATUS_IS_MOVING = 0x1
 _STATUS_IS_CARRYING_BLOCK = 0x2
@@ -425,6 +427,143 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             )
             self.master_volume = str(selected).strip().lower()
             self.async_set_updated_data(None)
+
+    async def async_say_text(
+        self,
+        *,
+        text: str,
+        use_vector_voice: bool = True,
+        duration_scalar: float = 1.0,
+        pitch_scalar: float = 0.0,
+    ) -> None:
+        """Speak text using the robot TTS engine."""
+        normalized_text = text.strip()
+        if not normalized_text:
+            raise ValueError("Text must not be empty")
+
+        if not (0.05 <= duration_scalar <= 20.0):
+            raise ValueError("duration_scalar must be between 0.05 and 20.0")
+        if not (-1.0 <= pitch_scalar <= 1.0):
+            raise ValueError("pitch_scalar must be between -1.0 and 1.0")
+
+        client, messaging = await self._async_get_client()
+        request_kwargs: dict[str, Any] = {
+            "text": normalized_text,
+            "use_vector_voice": bool(use_vector_voice),
+            "duration_scalar": float(duration_scalar),
+        }
+        if pitch_scalar != 0.0:
+            request_kwargs["pitch_scalar"] = float(pitch_scalar)
+        request = messaging.protocol.SayTextRequest(**request_kwargs)
+
+        if hasattr(client.stub, "BehaviorControl"):
+            try:
+                await self._async_say_text_with_behavior_control(
+                    client,
+                    messaging,
+                    request,
+                    priority=messaging.protocol.ControlRequest.DEFAULT,
+                )
+            except ValueError as err:
+                if (
+                    "did not grant behavior control" not in str(err).lower()
+                    or not await self._async_wait_until_awake_for_say_text(
+                        timeout=_SAY_TEXT_WAKE_WAIT_TIMEOUT_SECONDS
+                    )
+                ):
+                    raise
+                await self._async_say_text_with_behavior_control(
+                    client,
+                    messaging,
+                    request,
+                    priority=messaging.protocol.ControlRequest.DEFAULT,
+                )
+            return
+
+        await client.rpc("SayText", request, timeout=_DEFAULT_TIMEOUT_SECONDS)
+
+    async def _async_wait_until_awake_for_say_text(self, *, timeout: float) -> bool:
+        """Wait until robot is no longer in sleeping activity state."""
+        elapsed = 0.0
+        while elapsed < timeout:
+            if self.current_activity != "sleeping":
+                return True
+            await asyncio.sleep(_SAY_TEXT_WAKE_POLL_INTERVAL_SECONDS)
+            elapsed += _SAY_TEXT_WAKE_POLL_INTERVAL_SECONDS
+        return self.current_activity != "sleeping"
+
+    async def _async_say_text_with_behavior_control(
+        self,
+        client: Any,
+        messaging: Any,
+        say_text_request: Any,
+        *,
+        priority: int,
+    ) -> None:
+        """Run one SayText call while holding a live behavior-control stream."""
+        if not hasattr(client.stub, "BehaviorControl"):
+            raise ValueError("BehaviorControl not supported by robot stub")
+
+        stream = None
+        granted = False
+        try:
+            stream = client.stub.BehaviorControl(
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+            )
+            await stream.write(
+                messaging.protocol.BehaviorControlRequest(
+                    control_request=messaging.protocol.ControlRequest(
+                        priority=priority,
+                    )
+                )
+            )
+
+            for _ in range(5):
+                response = await asyncio.wait_for(
+                    stream.read(),
+                    timeout=_DEFAULT_TIMEOUT_SECONDS,
+                )
+                if response is None:
+                    continue
+
+                response_type = response.WhichOneof("response_type")
+                if response_type == "control_granted_response":
+                    granted = True
+                    break
+                if response_type in {
+                    "control_lost_event",
+                    "reserved_control_lost_event",
+                }:
+                    break
+
+            if not granted:
+                raise ValueError("Vector did not grant behavior control for SayText")
+
+            await client.rpc(
+                "SayText",
+                say_text_request,
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+            )
+        finally:
+            if stream is not None:
+                try:
+                    await stream.write(
+                        messaging.protocol.BehaviorControlRequest(
+                            control_release=messaging.protocol.ControlRelease(),
+                        )
+                    )
+                except Exception:
+                    _LOGGER.debug(
+                        "Failed sending behavior control release after SayText",
+                        exc_info=True,
+                    )
+
+                try:
+                    await stream.done_writing()
+                except Exception:
+                    pass
+
+                stream.cancel()
 
     async def async_trigger_quick_action(self, action_key: str) -> None:
         """Trigger one supported quick action intent."""
