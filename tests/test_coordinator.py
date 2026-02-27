@@ -213,3 +213,69 @@ def test_trigger_quick_action_falls_back_to_unary_path_when_stub_lacks_rpc() -> 
     assert client.unary_calls == [
         "/Anki.Vector.external_interface.ExternalInterface/AppIntent"
     ]
+
+
+def test_say_text_retries_after_behavior_control_when_robot_returns_failed_to_say_text() -> None:
+    import asyncio
+
+    coordinator = object.__new__(VectorCoordinator)
+
+    class FakeSayTextRequest:
+        def __init__(self, **kwargs):  # type: ignore[no-untyped-def]
+            self.kwargs = kwargs
+
+    class FakeControlRequest:
+        DEFAULT = 20
+
+        def __init__(self, *, priority: int) -> None:
+            self.priority = priority
+
+    class FakeBehaviorControlRequest:
+        def __init__(self, *, control_request):  # type: ignore[no-untyped-def]
+            self.control_request = control_request
+
+    class FakeResponse:
+        def WhichOneof(self, _name: str) -> str:
+            return "control_granted_response"
+
+    class FakeStream:
+        async def read(self):  # type: ignore[no-untyped-def]
+            return FakeResponse()
+
+        def cancel(self) -> None:
+            return None
+
+    class FakeStub:
+        def AssumeBehaviorControl(self, _request, timeout):  # type: ignore[no-untyped-def]
+            assert timeout == 10.0
+            return FakeStream()
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.stub = FakeStub()
+            self.say_text_calls = 0
+
+        async def rpc(self, method_name: str, request, timeout):  # type: ignore[no-untyped-def]
+            assert method_name == "SayText"
+            assert timeout == 10.0
+            assert isinstance(request, FakeSayTextRequest)
+            self.say_text_calls += 1
+            if self.say_text_calls == 1:
+                raise RuntimeError("Failed to say text")
+            return object()
+
+    class FakeProtocol:
+        SayTextRequest = FakeSayTextRequest
+        ControlRequest = FakeControlRequest
+        BehaviorControlRequest = FakeBehaviorControlRequest
+
+    client = FakeClient()
+    messaging = SimpleNamespace(protocol=FakeProtocol)
+
+    async def _fake_get_client():
+        return client, messaging
+
+    coordinator._async_get_client = _fake_get_client  # type: ignore[attr-defined]
+
+    asyncio.run(coordinator.async_say_text(text="Hej Vector"))
+    assert client.say_text_calls == 2

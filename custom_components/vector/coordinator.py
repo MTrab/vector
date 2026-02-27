@@ -481,8 +481,52 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 if "failed to say text" not in details:
                     raise
 
+                # Some firmware variants require explicit behavior control
+                # before direct SayText calls.
+                granted = await self._async_assume_behavior_control(client, messaging)
+                if granted:
+                    try:
+                        await client.rpc(
+                            "SayText",
+                            request,
+                            timeout=_DEFAULT_TIMEOUT_SECONDS,
+                        )
+                        return
+                    except Exception as retry_err:
+                        last_error = retry_err
+                        retry_details = str(retry_err).lower()
+                        if "failed to say text" not in retry_details:
+                            raise
+
         if last_error is not None:
             raise last_error
+
+    async def _async_assume_behavior_control(self, client: Any, messaging: Any) -> bool:
+        """Try to acquire temporary behavior control for one action."""
+        stream = None
+        try:
+            stream = client.stub.AssumeBehaviorControl(
+                messaging.protocol.BehaviorControlRequest(
+                    control_request=messaging.protocol.ControlRequest(
+                        priority=messaging.protocol.ControlRequest.DEFAULT,
+                    )
+                ),
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+            )
+            response = await asyncio.wait_for(
+                stream.read(),
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+            )
+            if response is None:
+                return False
+
+            return response.WhichOneof("response_type") == "control_granted_response"
+        except Exception as err:
+            _LOGGER.debug("Failed to assume behavior control for SayText retry: %s", err)
+            return False
+        finally:
+            if stream is not None:
+                stream.cancel()
 
     async def async_trigger_quick_action(self, action_key: str) -> None:
         """Trigger one supported quick action intent."""
