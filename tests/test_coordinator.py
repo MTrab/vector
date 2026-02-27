@@ -8,6 +8,7 @@ from custom_components.vector.coordinator import (
     VectorCoordinator,
     _battery_percentage_from_wirepod_curve,
     _derive_activity_from_robot_state,
+    _extract_robot_telemetry_snapshot,
     _extract_camera_frame_bytes,
     _is_unauthenticated_error,
     _normalize_activity_state,
@@ -100,6 +101,69 @@ def test_extract_camera_frame_bytes_fallback_jpeg() -> None:
     """JPEG encodings should be extracted even without module helper."""
     response = SimpleNamespace(image_encoding=7, data=b"\xff\xd8\xff")
     assert _extract_camera_frame_bytes(None, response) == b"\xff\xd8\xff"
+
+
+def test_extract_robot_telemetry_snapshot_from_pyddlvector_helper() -> None:
+    """Telemetry helper should use pyddlvector extract_robot_telemetry when available."""
+    telemetry = SimpleNamespace(
+        roll_rad=0.11,
+        pitch_rad=-0.22,
+        yaw_rad=1.57,
+        lift_height_mm=33.3,
+    )
+    pyddlvector = SimpleNamespace(extract_robot_telemetry=lambda _state: telemetry)
+
+    assert _extract_robot_telemetry_snapshot(pyddlvector, None, object()) == (
+        0.11,
+        -0.22,
+        1.57,
+        33.3,
+    )
+
+
+def test_extract_robot_telemetry_snapshot_fallback_without_helper() -> None:
+    """Fallback should still expose pitch/yaw/lift from robot_state payload."""
+    robot_state = SimpleNamespace(
+        pose_pitch_rad=0.3,
+        pose_angle_rad=-0.4,
+        lift_height_mm=55.0,
+    )
+
+    assert _extract_robot_telemetry_snapshot(None, None, robot_state) == (
+        None,
+        0.3,
+        -0.4,
+        55.0,
+    )
+
+
+def test_extract_robot_telemetry_snapshot_uses_filter_process() -> None:
+    """Telemetry filter should be able to suppress noisy updates."""
+
+    class FakeFilter:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def process(self, telemetry):  # type: ignore[no-untyped-def]
+            self.calls += 1
+            if self.calls == 1:
+                return telemetry
+            return None
+
+    telemetry = SimpleNamespace(
+        roll_rad=0.2,
+        pitch_rad=0.1,
+        yaw_rad=-0.3,
+        lift_height_mm=44.0,
+    )
+    pyddlvector = SimpleNamespace(extract_robot_telemetry=lambda _state: telemetry)
+    telemetry_filter = FakeFilter()
+
+    first = _extract_robot_telemetry_snapshot(pyddlvector, telemetry_filter, object())
+    second = _extract_robot_telemetry_snapshot(pyddlvector, telemetry_filter, object())
+
+    assert first == (0.2, 0.1, -0.3, 44.0)
+    assert second == (None, None, None, None)
 
 
 def test_is_unauthenticated_error_from_string() -> None:
