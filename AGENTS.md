@@ -161,6 +161,7 @@ Each PR must include:
 - Known limitations
 - Any required configuration changes
 
+When a branch is merged it must also be deleted both local and remote, and changes merged to master must be pulled
 ---
 
 ## Security Constraints
