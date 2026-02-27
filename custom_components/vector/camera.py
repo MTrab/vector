@@ -8,7 +8,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .assets import VectorAsset, VectorAssetHandler
-from .const import DOMAIN
 from .coordinator import VectorCoordinator
 from .entity import VectorEntity
 
@@ -19,7 +18,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Vector camera entities from config entry."""
-    coordinator: VectorCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    coordinator: VectorCoordinator = entry.runtime_data["coordinator"]
     async_add_entities([VectorVisionCamera(coordinator, entry)])
 
 

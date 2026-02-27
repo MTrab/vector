@@ -10,7 +10,6 @@ import pytest
 from homeassistant.exceptions import ConfigEntryNotReady
 
 import custom_components.vector as vector_init
-from custom_components.vector.const import DOMAIN
 
 
 class FakeCoordinator:
@@ -44,7 +43,11 @@ def _hass() -> SimpleNamespace:
 
 
 def _entry(entry_id: str = "entry-1") -> SimpleNamespace:
-    return SimpleNamespace(entry_id=entry_id, data={"robot_name": "Vector-ABCD"})
+    return SimpleNamespace(
+        entry_id=entry_id,
+        data={"robot_name": "Vector-ABCD"},
+        runtime_data=None,
+    )
 
 
 def test_async_setup_entry_success(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -55,7 +58,8 @@ def test_async_setup_entry_success(monkeypatch: pytest.MonkeyPatch) -> None:
     result = asyncio.run(vector_init.async_setup_entry(hass, entry))
 
     assert result is True
-    assert entry.entry_id in hass.data[DOMAIN]
+    assert entry.runtime_data is not None
+    assert entry.runtime_data["coordinator"] is not None
     hass.config_entries.async_forward_entry_setups.assert_awaited_once()
 
 
@@ -77,5 +81,5 @@ def test_async_setup_entry_raises_not_ready_on_validation_error(
     with pytest.raises(ConfigEntryNotReady):
         asyncio.run(vector_init.async_setup_entry(hass, entry))
 
-    assert entry.entry_id not in hass.data.get(DOMAIN, {})
+    assert entry.runtime_data is None
     hass.config_entries.async_forward_entry_setups.assert_not_called()
