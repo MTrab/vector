@@ -156,6 +156,7 @@ class VectorOrientationRollSensor(VectorEntity, SensorEntity):
     _attr_icon = "mdi:axis-x-rotate-clockwise"
     _attr_native_unit_of_measurement = DEGREE
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 2
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
 
@@ -179,6 +180,7 @@ class VectorOrientationPitchSensor(VectorEntity, SensorEntity):
     _attr_icon = "mdi:axis-y-rotate-clockwise"
     _attr_native_unit_of_measurement = DEGREE
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 2
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
 
@@ -202,6 +204,7 @@ class VectorOrientationYawSensor(VectorEntity, SensorEntity):
     _attr_icon = "mdi:axis-z-rotate-clockwise"
     _attr_native_unit_of_measurement = DEGREE
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 2
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
 
