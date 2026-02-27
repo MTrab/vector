@@ -844,6 +844,7 @@ def _normalize_activity_state(activity: str | None) -> str:
         "charging on charger": "charging_on_charger",
         "exploring from charger": "exploring_from_charger",
         "looking for faces": "looking_for_faces",
+        "looking for charger": "looking_for_charger",
         "looking for cubes": "looking_for_cubes",
         "looking for objects": "looking_for_objects",
         "picking or placing object": "picking_or_placing_object",

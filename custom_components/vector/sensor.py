@@ -54,6 +54,7 @@ class VectorCurrentActivitySensor(VectorEntity, SensorEntity):
         "exploring",
         "exploring_from_charger",
         "looking_for_faces",
+        "looking_for_charger",
         "looking_for_cubes",
         "looking_for_objects",
         "picking_or_placing_object",

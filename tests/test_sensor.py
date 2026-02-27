@@ -100,6 +100,7 @@ def test_current_activity_sensor_options_include_new_tracker_states() -> None:
     assert "charging_on_charger" in entity.options
     assert "exploring_from_charger" in entity.options
     assert "looking_for_faces" in entity.options
+    assert "looking_for_charger" in entity.options
     assert "looking_for_cubes" in entity.options
     assert "looking_for_objects" in entity.options
     assert "picking_or_placing_object" in entity.options
