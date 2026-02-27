@@ -52,8 +52,18 @@ def test_derive_activity_charging() -> None:
 
 def test_normalize_activity_state_new_labels() -> None:
     """New pyddlvector activity labels should map to sensor state keys."""
+    assert _normalize_activity_state("Falling") == "falling"
+    assert _normalize_activity_state("Cliff detected") == "cliff_detected"
+    assert _normalize_activity_state("Being held") == "being_held"
+    assert _normalize_activity_state("Picked up") == "picked_up"
+    assert _normalize_activity_state("Charging on charger") == "charging_on_charger"
     assert _normalize_activity_state("Exploring from charger") == "exploring_from_charger"
     assert _normalize_activity_state("Looking for faces") == "looking_for_faces"
+    assert _normalize_activity_state("Picking or placing object") == "picking_or_placing_object"
+    assert _normalize_activity_state("Carrying an object") == "carrying_object"
+    assert _normalize_activity_state("Animating") == "animating"
+    assert _normalize_activity_state("Button pressed") == "button_pressed"
+    assert _normalize_activity_state("Ready") == "ready"
     assert _normalize_activity_state("Idle / standing still") == "idle"
 
 

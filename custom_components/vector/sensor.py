@@ -45,12 +45,21 @@ class VectorCurrentActivitySensor(VectorEntity, SensorEntity):
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = [
         "unknown",
+        "falling",
+        "cliff_detected",
+        "being_held",
+        "picked_up",
+        "charging_on_charger",
         "sleeping",
         "exploring",
         "exploring_from_charger",
         "looking_for_faces",
         "looking_for_cubes",
         "looking_for_objects",
+        "picking_or_placing_object",
+        "animating",
+        "button_pressed",
+        "ready",
         # Backward-compatible fallback values used when tracker is unavailable.
         "moving",
         "being_touched",

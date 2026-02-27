@@ -93,10 +93,19 @@ def test_current_activity_sensor_options_include_new_tracker_states() -> None:
 
     entity = VectorCurrentActivitySensor(coordinator, entry)
 
+    assert "falling" in entity.options
+    assert "cliff_detected" in entity.options
+    assert "being_held" in entity.options
+    assert "picked_up" in entity.options
+    assert "charging_on_charger" in entity.options
     assert "exploring_from_charger" in entity.options
     assert "looking_for_faces" in entity.options
     assert "looking_for_cubes" in entity.options
     assert "looking_for_objects" in entity.options
+    assert "picking_or_placing_object" in entity.options
+    assert "animating" in entity.options
+    assert "button_pressed" in entity.options
+    assert "ready" in entity.options
 
 
 def test_current_activity_sensor_device_identifier_prefers_serial() -> None:

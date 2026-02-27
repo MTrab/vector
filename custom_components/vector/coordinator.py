@@ -837,12 +837,22 @@ def _normalize_activity_state(activity: str | None) -> str:
         return STATE_UNKNOWN
 
     aliases: dict[str, str] = {
+        "falling": "falling",
+        "cliff detected": "cliff_detected",
+        "being held": "being_held",
+        "picked up": "picked_up",
+        "charging on charger": "charging_on_charger",
         "exploring from charger": "exploring_from_charger",
         "looking for faces": "looking_for_faces",
         "looking for cubes": "looking_for_cubes",
         "looking for objects": "looking_for_objects",
+        "picking or placing object": "picking_or_placing_object",
+        "carrying an object": "carrying_object",
         "exploring": "exploring",
+        "animating": "animating",
+        "button pressed": "button_pressed",
         "idle / standing still": "idle",
+        "ready": "ready",
         "standing still while carrying an object": "carrying_object",
         "being touched": "being_touched",
         "on charger": "on_charger",
