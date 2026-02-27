@@ -59,7 +59,6 @@
         "state": {
           "unknown": "Unknown",
           "sleeping": "Sleeping",
-          "moving": "Moving",
           "exploring": "Exploring",
           "exploring_from_charger": "Exploring from charger",
           "looking_for_faces": "Looking for faces",
@@ -67,8 +66,6 @@
           "looking_for_objects": "Looking for objects",
           "being_touched": "Being touched",
           "carrying_object": "Carrying object",
-          "charging": "Charging",
-          "on_charger": "On charger",
           "idle": "Idle"
         }
       }
