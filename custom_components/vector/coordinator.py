@@ -500,6 +500,13 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                         priority=priority,
                     ):
                         return
+                    if await self._async_say_text_with_assume_behavior_control(
+                        client,
+                        messaging,
+                        request,
+                        priority=priority,
+                    ):
+                        return
 
         if last_error is not None:
             raise last_error
@@ -574,6 +581,86 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 except Exception:
                     _LOGGER.debug(
                         "Failed sending behavior control release after SayText",
+                        exc_info=True,
+                    )
+
+                try:
+                    await stream.done_writing()
+                except Exception:
+                    pass
+
+                stream.cancel()
+
+    async def _async_say_text_with_assume_behavior_control(
+        self,
+        client: Any,
+        messaging: Any,
+        say_text_request: Any,
+        *,
+        priority: int,
+    ) -> bool:
+        """Try SayText while holding an AssumeBehaviorControl stream."""
+        if not hasattr(client.stub, "AssumeBehaviorControl"):
+            return False
+
+        stream = None
+        granted = False
+        try:
+            stream = client.stub.AssumeBehaviorControl(
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+            )
+            await stream.write(
+                messaging.protocol.BehaviorControlRequest(
+                    control_request=messaging.protocol.ControlRequest(
+                        priority=priority,
+                    )
+                )
+            )
+
+            for _ in range(5):
+                response = await asyncio.wait_for(
+                    stream.read(),
+                    timeout=_DEFAULT_TIMEOUT_SECONDS,
+                )
+                if response is None:
+                    continue
+
+                response_type = response.WhichOneof("response_type")
+                if response_type == "control_granted_response":
+                    granted = True
+                    break
+                if response_type in {
+                    "control_lost_event",
+                    "reserved_control_lost_event",
+                }:
+                    break
+
+            if not granted:
+                return False
+
+            await client.rpc(
+                "SayText",
+                say_text_request,
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+            )
+            return True
+        except Exception as err:
+            _LOGGER.debug(
+                "Failed SayText with assume behavior control retry: %s",
+                err,
+            )
+            return False
+        finally:
+            if stream is not None:
+                try:
+                    await stream.write(
+                        messaging.protocol.BehaviorControlRequest(
+                            control_release=messaging.protocol.ControlRelease(),
+                        )
+                    )
+                except Exception:
+                    _LOGGER.debug(
+                        "Failed sending assume behavior control release after SayText",
                         exc_info=True,
                     )
 
