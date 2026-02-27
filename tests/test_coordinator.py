@@ -113,7 +113,7 @@ def test_extract_robot_telemetry_snapshot_from_pyddlvector_helper() -> None:
     )
     pyddlvector = SimpleNamespace(extract_robot_telemetry=lambda _state: telemetry)
 
-    assert _extract_robot_telemetry_snapshot(pyddlvector, object()) == (
+    assert _extract_robot_telemetry_snapshot(pyddlvector, None, object()) == (
         0.11,
         -0.22,
         1.57,
@@ -129,12 +129,41 @@ def test_extract_robot_telemetry_snapshot_fallback_without_helper() -> None:
         lift_height_mm=55.0,
     )
 
-    assert _extract_robot_telemetry_snapshot(None, robot_state) == (
+    assert _extract_robot_telemetry_snapshot(None, None, robot_state) == (
         None,
         0.3,
         -0.4,
         55.0,
     )
+
+
+def test_extract_robot_telemetry_snapshot_uses_filter_process() -> None:
+    """Telemetry filter should be able to suppress noisy updates."""
+
+    class FakeFilter:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def process(self, telemetry):  # type: ignore[no-untyped-def]
+            self.calls += 1
+            if self.calls == 1:
+                return telemetry
+            return None
+
+    telemetry = SimpleNamespace(
+        roll_rad=0.2,
+        pitch_rad=0.1,
+        yaw_rad=-0.3,
+        lift_height_mm=44.0,
+    )
+    pyddlvector = SimpleNamespace(extract_robot_telemetry=lambda _state: telemetry)
+    telemetry_filter = FakeFilter()
+
+    first = _extract_robot_telemetry_snapshot(pyddlvector, telemetry_filter, object())
+    second = _extract_robot_telemetry_snapshot(pyddlvector, telemetry_filter, object())
+
+    assert first == (0.2, 0.1, -0.3, 44.0)
+    assert second == (None, None, None, None)
 
 
 def test_is_unauthenticated_error_from_string() -> None:

@@ -94,6 +94,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self._pyddlvector: Any | None = None
         self._messaging: Any | None = None
         self._activity_tracker: Any | None = None
+        self._telemetry_filter: Any | None = None
         self._event_listener_task: asyncio.Task[None] | None = None
         self._camera_stream_task: asyncio.Task[None] | None = None
         self._camera_stream_lock = asyncio.Lock()
@@ -269,6 +270,8 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             pyddlvector, "RobotActivityTracker"
         ):
             self._activity_tracker = pyddlvector.RobotActivityTracker()
+        if self._telemetry_filter is None and hasattr(pyddlvector, "TelemetryFilter"):
+            self._telemetry_filter = pyddlvector.TelemetryFilter()
         return pyddlvector, messaging
 
     async def _async_read_current_activity(self, client: Any, messaging: Any) -> str:
@@ -351,7 +354,9 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                             next_yaw,
                             next_lift_height,
                         ) = _extract_robot_telemetry_snapshot(
-                            self._pyddlvector, robot_state
+                            self._pyddlvector,
+                            self._telemetry_filter,
+                            robot_state,
                         )
 
                         if next_activity != self.current_activity:
@@ -360,16 +365,19 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                         if next_charging != self.is_charging:
                             self.is_charging = next_charging
                             has_changes = True
-                        if next_roll != self.orientation_roll_rad:
+                        if next_roll is not None and next_roll != self.orientation_roll_rad:
                             self.orientation_roll_rad = next_roll
                             has_changes = True
-                        if next_pitch != self.orientation_pitch_rad:
+                        if next_pitch is not None and next_pitch != self.orientation_pitch_rad:
                             self.orientation_pitch_rad = next_pitch
                             has_changes = True
-                        if next_yaw != self.orientation_yaw_rad:
+                        if next_yaw is not None and next_yaw != self.orientation_yaw_rad:
                             self.orientation_yaw_rad = next_yaw
                             has_changes = True
-                        if next_lift_height != self.lift_height_mm:
+                        if (
+                            next_lift_height is not None
+                            and next_lift_height != self.lift_height_mm
+                        ):
                             self.lift_height_mm = next_lift_height
                             has_changes = True
                     elif event_type == "stimulation_info":
@@ -793,6 +801,10 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self._client = None
         if clear_robot_config:
             self._robot_config = None
+        if self._telemetry_filter is not None and hasattr(
+            self._telemetry_filter, "reset"
+        ):
+            self._telemetry_filter.reset()
 
         if client is not None:
             try:
@@ -996,10 +1008,15 @@ def _normalize_stimulation_snapshot(
 
 def _extract_robot_telemetry_snapshot(
     pyddlvector: Any | None,
+    telemetry_filter: Any | None,
     robot_state: Any,
 ) -> tuple[float | None, float | None, float | None, float | None]:
     if pyddlvector is not None and hasattr(pyddlvector, "extract_robot_telemetry"):
         telemetry = pyddlvector.extract_robot_telemetry(robot_state)
+        if telemetry_filter is not None and hasattr(telemetry_filter, "process"):
+            telemetry = telemetry_filter.process(telemetry)
+            if telemetry is None:
+                return (None, None, None, None)
         return (
             float(getattr(telemetry, "roll_rad", 0.0)),
             float(getattr(telemetry, "pitch_rad", 0.0)),
