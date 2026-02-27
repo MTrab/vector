@@ -652,6 +652,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             stream = None
             try:
                 client, messaging = await self._async_get_client()
+                await self._async_enable_image_streaming(client, messaging)
                 stream = client.stub.CameraFeed(messaging.protocol.CameraFeedRequest())
 
                 while True:
@@ -676,10 +677,36 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 if _is_unauthenticated_error(err):
                     await self._async_handle_auth_failure("camera stream", err)
                     continue
+                _LOGGER.warning("Vector camera stream interrupted: %s", err)
                 await asyncio.sleep(_CAMERA_RECONNECT_DELAY_SECONDS)
             finally:
                 if stream is not None:
                     stream.cancel()
+
+    async def _async_enable_image_streaming(self, client: Any, messaging: Any) -> None:
+        """Enable image streaming when supported by the robot stub."""
+        if not hasattr(client.stub, "EnableImageStreaming"):
+            return
+
+        request_cls = getattr(messaging.protocol, "EnableImageStreamingRequest", None)
+        if request_cls is None:
+            return
+
+        request_kwargs: dict[str, Any] = {"enable": True}
+        descriptor = getattr(request_cls, "DESCRIPTOR", None)
+        fields_by_name = getattr(descriptor, "fields_by_name", {})
+        if "enable_high_resolution" in fields_by_name:
+            request_kwargs["enable_high_resolution"] = False
+
+        try:
+            request = request_cls(**request_kwargs)
+            await client.rpc(
+                "EnableImageStreaming",
+                request,
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+            )
+        except Exception as err:
+            _LOGGER.debug("Failed to enable image streaming: %s", err)
 
     def _update_stimulation_from_event(self, stimulation_info: Any) -> bool:
         pyddlvector = self._pyddlvector
