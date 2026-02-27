@@ -83,6 +83,10 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self.stimulation_min_value: float | None = None
         self.stimulation_max_value: float | None = None
         self.stimulation_emotion_events: tuple[str, ...] = ()
+        self.orientation_roll_rad: float | None = None
+        self.orientation_pitch_rad: float | None = None
+        self.orientation_yaw_rad: float | None = None
+        self.lift_height_mm: float | None = None
         self.camera_frame: bytes | None = None
         self.camera_frame_updated_monotonic: float | None = None
         self._client: Any | None = None
@@ -341,12 +345,32 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                                 robot_state
                             )
                         next_charging = _charging_from_robot_state(robot_state)
+                        (
+                            next_roll,
+                            next_pitch,
+                            next_yaw,
+                            next_lift_height,
+                        ) = _extract_robot_telemetry_snapshot(
+                            self._pyddlvector, robot_state
+                        )
 
                         if next_activity != self.current_activity:
                             self.current_activity = next_activity
                             has_changes = True
                         if next_charging != self.is_charging:
                             self.is_charging = next_charging
+                            has_changes = True
+                        if next_roll != self.orientation_roll_rad:
+                            self.orientation_roll_rad = next_roll
+                            has_changes = True
+                        if next_pitch != self.orientation_pitch_rad:
+                            self.orientation_pitch_rad = next_pitch
+                            has_changes = True
+                        if next_yaw != self.orientation_yaw_rad:
+                            self.orientation_yaw_rad = next_yaw
+                            has_changes = True
+                        if next_lift_height != self.lift_height_mm:
+                            self.lift_height_mm = next_lift_height
                             has_changes = True
                     elif event_type == "stimulation_info":
                         has_changes = self._update_stimulation_from_event(
@@ -967,6 +991,30 @@ def _normalize_stimulation_snapshot(
         float(getattr(stimulation_info, "min_value", 0.0)),
         float(getattr(stimulation_info, "max_value", 0.0)),
         emotion_events,
+    )
+
+
+def _extract_robot_telemetry_snapshot(
+    pyddlvector: Any | None,
+    robot_state: Any,
+) -> tuple[float | None, float | None, float | None, float | None]:
+    if pyddlvector is not None and hasattr(pyddlvector, "extract_robot_telemetry"):
+        telemetry = pyddlvector.extract_robot_telemetry(robot_state)
+        return (
+            float(getattr(telemetry, "roll_rad", 0.0)),
+            float(getattr(telemetry, "pitch_rad", 0.0)),
+            float(getattr(telemetry, "yaw_rad", 0.0)),
+            float(getattr(telemetry, "lift_height_mm", 0.0)),
+        )
+
+    pitch_rad = getattr(robot_state, "pose_pitch_rad", None)
+    yaw_rad = getattr(robot_state, "pose_angle_rad", None)
+    lift_height_mm = getattr(robot_state, "lift_height_mm", None)
+    return (
+        None,
+        float(pitch_rad) if pitch_rad is not None else None,
+        float(yaw_rad) if yaw_rad is not None else None,
+        float(lift_height_mm) if lift_height_mm is not None else None,
     )
 
 

@@ -42,6 +42,18 @@
       "battery": {
         "name": "Battery"
       },
+      "orientation_roll": {
+        "name": "Orientation roll"
+      },
+      "orientation_pitch": {
+        "name": "Orientation pitch"
+      },
+      "orientation_yaw": {
+        "name": "Orientation yaw"
+      },
+      "lift_height": {
+        "name": "Lift height"
+      },
       "days_alive": {
         "name": "Days alive"
       },

@@ -15,6 +15,10 @@ from custom_components.vector.sensor import (
     VectorCurrentActivitySensor,
     VectorDaysAliveSensor,
     VectorDistanceMovedSensor,
+    VectorLiftHeightSensor,
+    VectorOrientationPitchSensor,
+    VectorOrientationRollSensor,
+    VectorOrientationYawSensor,
     VectorReactedToTriggerWordSensor,
     VectorSecondsPettedSensor,
     VectorStimulationSensor,
@@ -44,6 +48,10 @@ class FakeCoordinator:
         stimulation_min_value: float | None = None,
         stimulation_max_value: float | None = None,
         stimulation_emotion_events: tuple[str, ...] = (),
+        orientation_roll_rad: float | None = None,
+        orientation_pitch_rad: float | None = None,
+        orientation_yaw_rad: float | None = None,
+        lift_height_mm: float | None = None,
     ) -> None:
         """Initialize coordinator stub."""
         self.current_activity = current_activity
@@ -64,6 +72,10 @@ class FakeCoordinator:
         self.stimulation_min_value = stimulation_min_value
         self.stimulation_max_value = stimulation_max_value
         self.stimulation_emotion_events = stimulation_emotion_events
+        self.orientation_roll_rad = orientation_roll_rad
+        self.orientation_pitch_rad = orientation_pitch_rad
+        self.orientation_yaw_rad = orientation_yaw_rad
+        self.lift_height_mm = lift_height_mm
 
     def async_add_listener(self, update_callback):
         """Match DataUpdateCoordinator listener contract."""
@@ -172,6 +184,23 @@ def test_stimulation_sensor_value_and_attributes() -> None:
     }
 
 
+def test_telemetry_sensors_values() -> None:
+    """Telemetry sensors should expose orientation and lift values."""
+    coordinator = FakeCoordinator(
+        current_activity="ready",
+        orientation_roll_rad=0.1,
+        orientation_pitch_rad=-0.2,
+        orientation_yaw_rad=1.57,
+        lift_height_mm=42.5,
+    )
+    entry = _entry({CONF_ROBOT_NAME: "Vector-ABCD", CONF_HOST: "192.168.1.10"})
+
+    assert VectorOrientationRollSensor(coordinator, entry).native_value == 0.1
+    assert VectorOrientationPitchSensor(coordinator, entry).native_value == -0.2
+    assert VectorOrientationYawSensor(coordinator, entry).native_value == 1.57
+    assert VectorLiftHeightSensor(coordinator, entry).native_value == 42.5
+
+
 def test_stats_sensors_values() -> None:
     """Lifetime stats sensors should expose coordinator values."""
     coordinator = FakeCoordinator(
@@ -210,6 +239,30 @@ def test_stats_sensors_are_disabled_by_default() -> None:
     )
     assert (
         VectorDistanceMovedSensor(coordinator, entry).entity_registry_enabled_default
+        is False
+    )
+    assert (
+        VectorOrientationRollSensor(
+            coordinator, entry
+        ).entity_registry_enabled_default
+        is False
+    )
+    assert (
+        VectorOrientationPitchSensor(
+            coordinator, entry
+        ).entity_registry_enabled_default
+        is False
+    )
+    assert (
+        VectorOrientationYawSensor(
+            coordinator, entry
+        ).entity_registry_enabled_default
+        is False
+    )
+    assert (
+        VectorLiftHeightSensor(
+            coordinator, entry
+        ).entity_registry_enabled_default
         is False
     )
 
