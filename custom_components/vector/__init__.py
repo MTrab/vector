@@ -8,7 +8,7 @@ from typing import TypedDict
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_DEVICE_ID
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 
@@ -165,10 +165,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     domain_data["coordinators"][entry.entry_id] = coordinator
 
     if not hass.services.has_service(DOMAIN, SERVICE_SAY_TEXT):
+        async def _async_say_text_service(call: ServiceCall) -> None:
+            await _async_handle_say_text_service(hass, call.data)
+
         hass.services.async_register(
             DOMAIN,
             SERVICE_SAY_TEXT,
-            lambda call: _async_handle_say_text_service(hass, call.data),
+            _async_say_text_service,
             schema=_SAY_TEXT_SERVICE_SCHEMA,
         )
 
