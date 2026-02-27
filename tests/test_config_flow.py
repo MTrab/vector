@@ -103,3 +103,24 @@ def test_async_step_zeroconf_creates_entry_for_vector_name() -> None:
     assert result["data"][CONF_HOST] == "vector-abcd.local"
     flow.async_set_unique_id.assert_awaited_once_with("vector-abcd_vector-abcd.local")
     flow._abort_if_unique_id_configured.assert_called_once()
+
+
+def test_async_step_zeroconf_creates_entry_for_lowercase_vector_name() -> None:
+    flow = VectorConfigFlow()
+    _prepare_flow(flow)
+
+    result = asyncio.run(
+        flow.async_step_zeroconf(
+            SimpleNamespace(
+                name="vector-abcd._tcp.local.",
+                host="vector-abcd.local.",
+            )
+        )
+    )
+
+    assert result["type"] == "create_entry"
+    assert result["title"] == "vector-abcd"
+    assert result["data"][CONF_ROBOT_NAME] == "vector-abcd"
+    assert result["data"][CONF_HOST] == "vector-abcd.local"
+    flow.async_set_unique_id.assert_awaited_once_with("vector-abcd_vector-abcd.local")
+    flow._abort_if_unique_id_configured.assert_called_once()

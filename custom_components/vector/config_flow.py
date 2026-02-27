@@ -12,7 +12,7 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
-from .const import CONF_EMAIL, CONF_ROBOT_NAME, CONF_SERIAL, DOMAIN, VECTOR_NAME_PREFIX
+from .const import CONF_EMAIL, CONF_ROBOT_NAME, CONF_SERIAL, DOMAIN
 
 VECTOR_HOSTNAME_RE = re.compile(r"^Vector-[A-Za-z0-9]{4,}$", re.IGNORECASE)
 HOST_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.-]{0,252}[A-Za-z0-9]$")
@@ -54,8 +54,6 @@ class VectorConfigFlow(ConfigFlow, domain=DOMAIN):
         unique_id = self._discovery_unique_id(robot_name, host)
         await self.async_set_unique_id(unique_id)
         self._abort_if_unique_id_configured()
-
-        self.context["title_placeholders"] = {"name": robot_name, "host": host}
         return None
 
     async def async_step_user(
@@ -139,8 +137,9 @@ class VectorConfigFlow(ConfigFlow, domain=DOMAIN):
         if host.endswith("."):
             host = host[:-1]
 
-        candidate = name if name.startswith(VECTOR_NAME_PREFIX) else host
-        candidate = candidate.strip()
+        candidate = name.strip()
+        if not VECTOR_HOSTNAME_RE.match(candidate):
+            candidate = host.split(".", 1)[0].strip()
 
         if not VECTOR_HOSTNAME_RE.match(candidate):
             return self.async_abort(reason="not_vector")
