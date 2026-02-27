@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, MASTER_VOLUME_OPTIONS
+from .const import MASTER_VOLUME_OPTIONS
 from .coordinator import VectorCoordinator
 from .entity import VectorEntity
 
@@ -19,7 +19,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Vector selects from a config entry."""
-    coordinator: VectorCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    coordinator: VectorCoordinator = entry.runtime_data["coordinator"]
     async_add_entities([VectorMasterVolumeSelect(coordinator, entry)])
 
 
