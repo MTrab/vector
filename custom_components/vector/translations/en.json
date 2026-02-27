@@ -93,5 +93,33 @@
       "already_configured": "This Vector robot is already configured.",
       "not_vector": "Discovered device is not a Vector robot."
     }
+  },
+  "services": {
+    "say_text": {
+      "name": "Say text",
+      "description": "Make Vector speak text using the robot text-to-speech engine.",
+      "fields": {
+        "text": {
+          "name": "Text",
+          "description": "Text for Vector to speak."
+        },
+        "device_id": {
+          "name": "Device",
+          "description": "Target Vector device. Required when multiple Vector devices are configured."
+        },
+        "use_vector_voice": {
+          "name": "Use Vector voice",
+          "description": "Use Vector's built-in voice profile."
+        },
+        "duration_scalar": {
+          "name": "Duration scalar",
+          "description": "Speech speed scalar from 0.05 (fast) to 20.0 (slow)."
+        },
+        "pitch_scalar": {
+          "name": "Pitch scalar",
+          "description": "Voice pitch scalar from -1.0 (low) to 1.0 (high)."
+        }
+      }
+    }
   }
 }
