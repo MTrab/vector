@@ -5,12 +5,23 @@ from __future__ import annotations
 import asyncio
 from typing import TypedDict
 
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
+from homeassistant.helpers import config_validation as cv
 
 from .const import PLATFORMS
 from .coordinator import VectorCoordinator
+from .const import (
+    ATTR_DURATION_SCALAR,
+    ATTR_ENTRY_ID,
+    ATTR_PITCH_SCALAR,
+    ATTR_TEXT,
+    ATTR_USE_VECTOR_VOICE,
+    DOMAIN,
+    SERVICE_SAY_TEXT,
+)
 
 _SETUP_VALIDATION_TIMEOUT_SECONDS = 20.0
 
@@ -20,6 +31,76 @@ class VectorRuntimeData(TypedDict):
 
     coordinator: VectorCoordinator
     start_task: asyncio.Task[None] | None
+
+
+class VectorDomainData(TypedDict):
+    """Runtime data stored on hass.data for this integration domain."""
+
+    coordinators: dict[str, VectorCoordinator]
+
+
+_SAY_TEXT_SERVICE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_TEXT): cv.string,
+        vol.Optional(ATTR_ENTRY_ID): cv.string,
+        vol.Optional(ATTR_USE_VECTOR_VOICE, default=True): cv.boolean,
+        vol.Optional(ATTR_DURATION_SCALAR, default=1.0): vol.Coerce(float),
+        vol.Optional(ATTR_PITCH_SCALAR, default=0.0): vol.Coerce(float),
+    }
+)
+
+
+def _get_or_create_domain_data(hass: HomeAssistant) -> VectorDomainData:
+    """Return mutable domain-scoped runtime data."""
+    if DOMAIN not in hass.data:
+        hass.data[DOMAIN] = {"coordinators": {}}
+    return hass.data[DOMAIN]
+
+
+def _resolve_target_coordinator(
+    *,
+    coordinators: dict[str, VectorCoordinator],
+    entry_id: str | None,
+) -> VectorCoordinator:
+    if entry_id is not None:
+        coordinator = coordinators.get(entry_id)
+        if coordinator is None:
+            raise ServiceValidationError(f"Unknown entry_id: {entry_id}")
+        return coordinator
+
+    if len(coordinators) == 1:
+        return next(iter(coordinators.values()))
+
+    raise ServiceValidationError(
+        "Multiple Vector entries configured. Provide entry_id."
+    )
+
+
+async def _async_handle_say_text_service(
+    hass: HomeAssistant,
+    call_data: dict[str, str | bool | float],
+) -> None:
+    domain_data = _get_or_create_domain_data(hass)
+    coordinator = _resolve_target_coordinator(
+        coordinators=domain_data["coordinators"],
+        entry_id=call_data.get(ATTR_ENTRY_ID)
+        if isinstance(call_data.get(ATTR_ENTRY_ID), str)
+        else None,
+    )
+
+    text = call_data[ATTR_TEXT]
+    if not isinstance(text, str):
+        raise ServiceValidationError("text must be a string")
+
+    try:
+        await coordinator.async_say_text(
+            text=text,
+            use_vector_voice=bool(call_data.get(ATTR_USE_VECTOR_VOICE, True)),
+            duration_scalar=float(call_data.get(ATTR_DURATION_SCALAR, 1.0)),
+            pitch_scalar=float(call_data.get(ATTR_PITCH_SCALAR, 0.0)),
+        )
+    except ValueError as err:
+        raise ServiceValidationError(str(err)) from err
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -46,6 +127,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
         "start_task": None,
     }
+    domain_data = _get_or_create_domain_data(hass)
+    domain_data["coordinators"][entry.entry_id] = coordinator
+
+    if not hass.services.has_service(DOMAIN, SERVICE_SAY_TEXT):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SAY_TEXT,
+            lambda call: _async_handle_say_text_service(hass, call.data),
+            schema=_SAY_TEXT_SERVICE_SCHEMA,
+        )
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     start_task = hass.async_create_background_task(
@@ -69,4 +161,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if coordinator is not None:
                 await coordinator.async_shutdown()
             entry.runtime_data = None
+
+        domain_data = hass.data.get(DOMAIN)
+        if domain_data is not None:
+            coordinators = domain_data.get("coordinators", {})
+            coordinators.pop(entry.entry_id, None)
+            if not coordinators:
+                hass.services.async_remove(DOMAIN, SERVICE_SAY_TEXT)
+                hass.data.pop(DOMAIN, None)
     return unload_ok

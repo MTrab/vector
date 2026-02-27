@@ -1,0 +1,35 @@
+say_text:
+  name: Say Text
+  description: Make Vector speak text via the robot TTS engine.
+  fields:
+    text:
+      required: true
+      selector:
+        text:
+    entry_id:
+      required: false
+      selector:
+        text:
+    use_vector_voice:
+      required: false
+      default: true
+      selector:
+        boolean:
+    duration_scalar:
+      required: false
+      default: 1.0
+      selector:
+        number:
+          min: 0.05
+          max: 20.0
+          step: 0.05
+          mode: box
+    pitch_scalar:
+      required: false
+      default: 0.0
+      selector:
+        number:
+          min: -1.0
+          max: 1.0
+          step: 0.05
+          mode: box

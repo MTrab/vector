@@ -424,6 +424,36 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             self.master_volume = str(selected).strip().lower()
             self.async_set_updated_data(None)
 
+    async def async_say_text(
+        self,
+        *,
+        text: str,
+        use_vector_voice: bool = True,
+        duration_scalar: float = 1.0,
+        pitch_scalar: float = 0.0,
+    ) -> None:
+        """Speak text using the robot TTS engine."""
+        normalized_text = text.strip()
+        if not normalized_text:
+            raise ValueError("Text must not be empty")
+
+        if not (0.05 <= duration_scalar <= 20.0):
+            raise ValueError("duration_scalar must be between 0.05 and 20.0")
+        if not (-1.0 <= pitch_scalar <= 1.0):
+            raise ValueError("pitch_scalar must be between -1.0 and 1.0")
+
+        client, messaging = await self._async_get_client()
+        await client.rpc(
+            "SayText",
+            messaging.protocol.SayTextRequest(
+                text=normalized_text,
+                use_vector_voice=bool(use_vector_voice),
+                duration_scalar=float(duration_scalar),
+                pitch_scalar=float(pitch_scalar),
+            ),
+            timeout=_DEFAULT_TIMEOUT_SECONDS,
+        )
+
     async def async_start_camera_stream(self) -> None:
         """Ensure persistent camera stream task is running."""
         async with self._camera_stream_lock:
