@@ -231,22 +231,41 @@ def test_say_text_retries_after_behavior_control_when_robot_returns_failed_to_sa
             self.priority = priority
 
     class FakeBehaviorControlRequest:
-        def __init__(self, *, control_request):  # type: ignore[no-untyped-def]
+        def __init__(
+            self,
+            *,
+            control_request=None,  # type: ignore[no-untyped-def]
+            control_release=None,  # type: ignore[no-untyped-def]
+        ):
             self.control_request = control_request
+            self.control_release = control_release
+
+    class FakeControlRelease:
+        pass
 
     class FakeResponse:
         def WhichOneof(self, _name: str) -> str:
             return "control_granted_response"
 
     class FakeStream:
+        def __init__(self) -> None:
+            self.write_calls = 0
+
+        async def write(self, _request):  # type: ignore[no-untyped-def]
+            self.write_calls += 1
+            return None
+
         async def read(self):  # type: ignore[no-untyped-def]
             return FakeResponse()
+
+        async def done_writing(self) -> None:
+            return None
 
         def cancel(self) -> None:
             return None
 
     class FakeStub:
-        def AssumeBehaviorControl(self, _request, timeout):  # type: ignore[no-untyped-def]
+        def BehaviorControl(self, timeout):  # type: ignore[no-untyped-def]
             assert timeout == 10.0
             return FakeStream()
 
@@ -268,6 +287,7 @@ def test_say_text_retries_after_behavior_control_when_robot_returns_failed_to_sa
         SayTextRequest = FakeSayTextRequest
         ControlRequest = FakeControlRequest
         BehaviorControlRequest = FakeBehaviorControlRequest
+        ControlRelease = FakeControlRelease
 
     client = FakeClient()
     messaging = SimpleNamespace(protocol=FakeProtocol)

@@ -481,51 +481,94 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 if "failed to say text" not in details:
                     raise
 
-                # Some firmware variants require explicit behavior control
-                # before direct SayText calls.
-                granted = await self._async_assume_behavior_control(client, messaging)
-                if granted:
-                    try:
-                        await client.rpc(
-                            "SayText",
-                            request,
-                            timeout=_DEFAULT_TIMEOUT_SECONDS,
-                        )
-                        return
-                    except Exception as retry_err:
-                        last_error = retry_err
-                        retry_details = str(retry_err).lower()
-                        if "failed to say text" not in retry_details:
-                            raise
+                # Some firmware variants require active behavior-control stream
+                # during direct SayText calls.
+                if await self._async_say_text_with_behavior_control(
+                    client,
+                    messaging,
+                    request,
+                ):
+                    return
 
         if last_error is not None:
             raise last_error
 
-    async def _async_assume_behavior_control(self, client: Any, messaging: Any) -> bool:
-        """Try to acquire temporary behavior control for one action."""
+    async def _async_say_text_with_behavior_control(
+        self,
+        client: Any,
+        messaging: Any,
+        say_text_request: Any,
+    ) -> bool:
+        """Try SayText while holding a live behavior-control stream."""
+        if not hasattr(client.stub, "BehaviorControl"):
+            return False
+
         stream = None
+        granted = False
         try:
-            stream = client.stub.AssumeBehaviorControl(
+            stream = client.stub.BehaviorControl(
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+            )
+            await stream.write(
                 messaging.protocol.BehaviorControlRequest(
                     control_request=messaging.protocol.ControlRequest(
                         priority=messaging.protocol.ControlRequest.DEFAULT,
                     )
-                ),
-                timeout=_DEFAULT_TIMEOUT_SECONDS,
+                )
             )
-            response = await asyncio.wait_for(
-                stream.read(),
-                timeout=_DEFAULT_TIMEOUT_SECONDS,
-            )
-            if response is None:
+
+            for _ in range(5):
+                response = await asyncio.wait_for(
+                    stream.read(),
+                    timeout=_DEFAULT_TIMEOUT_SECONDS,
+                )
+                if response is None:
+                    continue
+
+                response_type = response.WhichOneof("response_type")
+                if response_type == "control_granted_response":
+                    granted = True
+                    break
+                if response_type in {
+                    "control_lost_event",
+                    "reserved_control_lost_event",
+                }:
+                    break
+
+            if not granted:
                 return False
 
-            return response.WhichOneof("response_type") == "control_granted_response"
+            await client.rpc(
+                "SayText",
+                say_text_request,
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+            )
+            return True
         except Exception as err:
-            _LOGGER.debug("Failed to assume behavior control for SayText retry: %s", err)
+            _LOGGER.debug(
+                "Failed SayText with behavior control stream retry: %s",
+                err,
+            )
             return False
         finally:
             if stream is not None:
+                try:
+                    await stream.write(
+                        messaging.protocol.BehaviorControlRequest(
+                            control_release=messaging.protocol.ControlRelease(),
+                        )
+                    )
+                except Exception:
+                    _LOGGER.debug(
+                        "Failed sending behavior control release after SayText",
+                        exc_info=True,
+                    )
+
+                try:
+                    await stream.done_writing()
+                except Exception:
+                    pass
+
                 stream.cancel()
 
     async def async_trigger_quick_action(self, action_key: str) -> None:
