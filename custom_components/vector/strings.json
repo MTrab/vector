@@ -58,15 +58,26 @@
         "name": "Current activity",
         "state": {
           "unknown": "Unknown",
+          "falling": "Falling",
+          "cliff_detected": "Cliff detected",
+          "being_held": "Being held",
+          "picked_up": "Picked up",
           "sleeping": "Sleeping",
           "exploring": "Exploring",
-          "exploring_from_charger": "Exploring from charger",
+          "exploring_from_charger": "Chilling on the charger",
           "looking_for_faces": "Looking for faces",
-          "looking_for_cubes": "Looking for cubes",
+          "looking_for_charger": "Looking for charger",
+          "looking_for_cubes": "Looking for cube",
           "looking_for_objects": "Looking for objects",
+          "picking_or_placing_object": "Picking or placing object",
+          "button_pressed": "Button pressed",
           "being_touched": "Being touched",
           "carrying_object": "Carrying object",
-          "idle": "Idle"
+          "charging": "Charging",
+          "on_charger": "On charger",
+          "moving": "Moving",
+          "idle": "Idle",
+          "ready": "Ready"
         }
       }
     }

@@ -652,6 +652,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             stream = None
             try:
                 client, messaging = await self._async_get_client()
+                await self._async_enable_image_streaming(client, messaging)
                 stream = client.stub.CameraFeed(messaging.protocol.CameraFeedRequest())
 
                 while True:
@@ -676,10 +677,36 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 if _is_unauthenticated_error(err):
                     await self._async_handle_auth_failure("camera stream", err)
                     continue
+                _LOGGER.warning("Vector camera stream interrupted: %s", err)
                 await asyncio.sleep(_CAMERA_RECONNECT_DELAY_SECONDS)
             finally:
                 if stream is not None:
                     stream.cancel()
+
+    async def _async_enable_image_streaming(self, client: Any, messaging: Any) -> None:
+        """Enable image streaming when supported by the robot stub."""
+        if not hasattr(client.stub, "EnableImageStreaming"):
+            return
+
+        request_cls = getattr(messaging.protocol, "EnableImageStreamingRequest", None)
+        if request_cls is None:
+            return
+
+        request_kwargs: dict[str, Any] = {"enable": True}
+        descriptor = getattr(request_cls, "DESCRIPTOR", None)
+        fields_by_name = getattr(descriptor, "fields_by_name", {})
+        if "enable_high_resolution" in fields_by_name:
+            request_kwargs["enable_high_resolution"] = False
+
+        try:
+            request = request_cls(**request_kwargs)
+            await client.rpc(
+                "EnableImageStreaming",
+                request,
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+            )
+        except Exception as err:
+            _LOGGER.debug("Failed to enable image streaming: %s", err)
 
     def _update_stimulation_from_event(self, stimulation_info: Any) -> bool:
         pyddlvector = self._pyddlvector
@@ -837,12 +864,21 @@ def _normalize_activity_state(activity: str | None) -> str:
         return STATE_UNKNOWN
 
     aliases: dict[str, str] = {
+        "falling": "falling",
+        "cliff detected": "cliff_detected",
+        "being held": "being_held",
+        "picked up": "picked_up",
         "exploring from charger": "exploring_from_charger",
         "looking for faces": "looking_for_faces",
+        "looking for charger": "looking_for_charger",
         "looking for cubes": "looking_for_cubes",
         "looking for objects": "looking_for_objects",
+        "picking or placing object": "picking_or_placing_object",
+        "carrying an object": "carrying_object",
         "exploring": "exploring",
+        "button pressed": "button_pressed",
         "idle / standing still": "idle",
+        "ready": "ready",
         "standing still while carrying an object": "carrying_object",
         "being touched": "being_touched",
         "on charger": "on_charger",
