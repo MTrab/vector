@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 DOMAIN = "vector"
-PLATFORMS: list[str] = ["sensor", "select", "camera"]
+PLATFORMS: list[str] = ["sensor", "select", "button", "camera"]
 
 CONF_HOST = "host"
 CONF_ROBOT_NAME = "robot_name"
@@ -30,3 +30,11 @@ MASTER_VOLUME_OPTIONS: tuple[str, ...] = (
     "medium_high",
     "high",
 )
+
+QUICK_ACTION_INTENTS: dict[str, str] = {
+    "sleep": "intent_system_sleep",
+    "go_home": "intent_system_charger",
+    "explore_start": "explore_start",
+    "dance": "intent_imperative_dance",
+    "fetch_cube": "intent_imperative_fetchcube",
+}

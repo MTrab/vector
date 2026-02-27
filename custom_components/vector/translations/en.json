@@ -5,6 +5,23 @@
         "name": "Vision"
       }
     },
+    "button": {
+      "sleep": {
+        "name": "Sleep"
+      },
+      "go_home": {
+        "name": "Go home"
+      },
+      "explore_start": {
+        "name": "Explore start"
+      },
+      "dance": {
+        "name": "Dance"
+      },
+      "fetch_cube": {
+        "name": "Fetch cube"
+      }
+    },
     "select": {
       "master_volume": {
         "name": "Volume",

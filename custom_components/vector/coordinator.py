@@ -20,6 +20,7 @@ from .const import (
     CONF_SERIAL,
     EXCLUDED_ACTIVITY_STATUS_FLAGS,
     MASTER_VOLUME_OPTIONS,
+    QUICK_ACTION_INTENTS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -423,6 +424,19 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             )
             self.master_volume = str(selected).strip().lower()
             self.async_set_updated_data(None)
+
+    async def async_trigger_quick_action(self, action_key: str) -> None:
+        """Trigger one supported quick action intent."""
+        intent = QUICK_ACTION_INTENTS.get(action_key)
+        if intent is None:
+            raise ValueError(f"Unsupported quick action: {action_key}")
+
+        client, messaging = await self._async_get_client()
+        await client.rpc(
+            "AppIntent",
+            messaging.protocol.AppIntentRequest(intent=intent),
+            timeout=_DEFAULT_TIMEOUT_SECONDS,
+        )
 
     async def async_start_camera_stream(self) -> None:
         """Ensure persistent camera stream task is running."""

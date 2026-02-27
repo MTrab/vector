@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from custom_components.vector.coordinator import (
+    VectorCoordinator,
     _battery_percentage_from_wirepod_curve,
     _derive_activity_from_robot_state,
     _extract_camera_frame_bytes,
@@ -152,3 +153,16 @@ def test_resolve_provision_mode_rejects_missing_serial_in_wirepod_mode() -> None
         assert "serial" in str(err).lower()
     else:
         raise AssertionError("Expected ValueError when wire-pod mode misses serial")
+
+
+def test_trigger_quick_action_rejects_unknown_action() -> None:
+    coordinator = object.__new__(VectorCoordinator)
+
+    try:
+        import asyncio
+
+        asyncio.run(coordinator.async_trigger_quick_action("unknown_action"))
+    except ValueError as err:
+        assert "unsupported quick action" in str(err).lower()
+    else:
+        raise AssertionError("Expected ValueError for unsupported quick action")
