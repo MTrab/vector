@@ -51,6 +51,7 @@ class VectorCurrentActivitySensor(VectorEntity, SensorEntity):
         "picked_up",
         "sleeping",
         "exploring",
+        "exploring_from_charger",
         "looking_for_faces",
         "looking_for_charger",
         "looking_for_cubes",

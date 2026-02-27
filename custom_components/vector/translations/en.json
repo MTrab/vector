@@ -64,6 +64,7 @@
           "picked_up": "Picked up",
           "sleeping": "Sleeping",
           "exploring": "Exploring",
+          "exploring_from_charger": "Exploring from charger",
           "looking_for_faces": "Looking for faces",
           "looking_for_charger": "Looking for charger",
           "looking_for_cubes": "Looking for cubes",

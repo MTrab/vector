@@ -88,7 +88,7 @@ def test_current_activity_sensor_native_value() -> None:
 
 def test_current_activity_sensor_options_include_new_tracker_states() -> None:
     """Enum options must include normalized states emitted by activity tracker."""
-    coordinator = FakeCoordinator(current_activity="looking_for_charger")
+    coordinator = FakeCoordinator(current_activity="exploring_from_charger")
     entry = _entry({CONF_ROBOT_NAME: "Vector-ABCD", CONF_HOST: "192.168.1.10"})
 
     entity = VectorCurrentActivitySensor(coordinator, entry)
@@ -97,6 +97,7 @@ def test_current_activity_sensor_options_include_new_tracker_states() -> None:
     assert "cliff_detected" in entity.options
     assert "being_held" in entity.options
     assert "picked_up" in entity.options
+    assert "exploring_from_charger" in entity.options
     assert "looking_for_faces" in entity.options
     assert "looking_for_charger" in entity.options
     assert "looking_for_cubes" in entity.options
