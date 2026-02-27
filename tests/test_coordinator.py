@@ -464,3 +464,35 @@ def test_say_text_retries_after_sleep_when_control_not_granted() -> None:
 
     asyncio.run(coordinator.async_say_text(text="Hej Vector"))
     assert calls["attempts"] == 2
+
+
+def test_enable_image_streaming_skips_when_sleeping() -> None:
+    import asyncio
+
+    coordinator = object.__new__(VectorCoordinator)
+    coordinator.current_activity = "sleeping"
+
+    class FakeStub:
+        EnableImageStreaming = object()
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.stub = FakeStub()
+            self.calls = 0
+
+        async def rpc(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+            self.calls += 1
+            return object()
+
+    class FakeProtocol:
+        class EnableImageStreamingRequest:
+            DESCRIPTOR = SimpleNamespace(fields_by_name={})
+
+            def __init__(self, **_kwargs):  # type: ignore[no-untyped-def]
+                return None
+
+    client = FakeClient()
+    messaging = SimpleNamespace(protocol=FakeProtocol)
+
+    asyncio.run(coordinator._async_enable_image_streaming(client, messaging))
+    assert client.calls == 0

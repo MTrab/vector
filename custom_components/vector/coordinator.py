@@ -728,6 +728,9 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
 
     async def _async_enable_image_streaming(self, client: Any, messaging: Any) -> None:
         """Enable image streaming when supported by the robot stub."""
+        if self.current_activity == "sleeping":
+            return
+
         if not hasattr(client.stub, "EnableImageStreaming"):
             return
 
