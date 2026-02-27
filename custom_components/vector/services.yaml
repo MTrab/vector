@@ -29,7 +29,7 @@ say_text:
       default: 0.0
       selector:
         number:
-          min: -1.0
+          min: 0.0
           max: 1.0
           step: 0.05
           mode: box

@@ -117,7 +117,7 @@
         },
         "pitch_scalar": {
           "name": "Pitch scalar",
-          "description": "Voice pitch scalar from -1.0 (low) to 1.0 (high)."
+          "description": "Voice pitch scalar from 0.0 (normal) to 1.0 (high)."
         }
       }
     }
