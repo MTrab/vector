@@ -850,7 +850,6 @@ def _normalize_activity_state(activity: str | None) -> str:
         "picking or placing object": "picking_or_placing_object",
         "carrying an object": "carrying_object",
         "exploring": "exploring",
-        "animating": "animating",
         "button pressed": "button_pressed",
         "idle / standing still": "idle",
         "ready": "ready",

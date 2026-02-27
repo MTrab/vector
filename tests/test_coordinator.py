@@ -62,7 +62,6 @@ def test_normalize_activity_state_new_labels() -> None:
     assert _normalize_activity_state("Looking for charger") == "looking_for_charger"
     assert _normalize_activity_state("Picking or placing object") == "picking_or_placing_object"
     assert _normalize_activity_state("Carrying an object") == "carrying_object"
-    assert _normalize_activity_state("Animating") == "animating"
     assert _normalize_activity_state("Button pressed") == "button_pressed"
     assert _normalize_activity_state("Ready") == "ready"
     assert _normalize_activity_state("Idle / standing still") == "idle"

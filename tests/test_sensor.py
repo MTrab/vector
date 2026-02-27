@@ -104,7 +104,6 @@ def test_current_activity_sensor_options_include_new_tracker_states() -> None:
     assert "looking_for_cubes" in entity.options
     assert "looking_for_objects" in entity.options
     assert "picking_or_placing_object" in entity.options
-    assert "animating" in entity.options
     assert "button_pressed" in entity.options
     assert "ready" in entity.options
 

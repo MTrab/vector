@@ -58,7 +58,6 @@ class VectorCurrentActivitySensor(VectorEntity, SensorEntity):
         "looking_for_cubes",
         "looking_for_objects",
         "picking_or_placing_object",
-        "animating",
         "button_pressed",
         "ready",
         # Backward-compatible fallback values used when tracker is unavailable.
