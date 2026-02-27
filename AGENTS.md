@@ -160,8 +160,10 @@ Each PR must include:
 - Test strategy (automated or manual)
 - Known limitations
 - Any required configuration changes
+- If the PR resolves an issue, include the text `Fixes #<issue-id>`
 
 When a branch is merged it must also be deleted both local and remote, and changes merged to master must be pulled
+
 ---
 
 ## Security Constraints
