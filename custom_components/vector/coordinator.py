@@ -89,6 +89,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self._robot_config: Any | None = None
         self._pyddlvector: Any | None = None
         self._messaging: Any | None = None
+        self._activity_tracker: Any | None = None
         self._event_listener_task: asyncio.Task[None] | None = None
         self._camera_stream_task: asyncio.Task[None] | None = None
         self._camera_stream_lock = asyncio.Lock()
@@ -260,6 +261,10 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         )
         self._pyddlvector = pyddlvector
         self._messaging = messaging
+        if self._activity_tracker is None and hasattr(
+            pyddlvector, "RobotActivityTracker"
+        ):
+            self._activity_tracker = pyddlvector.RobotActivityTracker()
         return pyddlvector, messaging
 
     async def _async_read_current_activity(self, client: Any, messaging: Any) -> str:
@@ -275,14 +280,21 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 )
                 if event_response is None or not event_response.HasField("event"):
                     continue
+                event = event_response.event
+                if self._activity_tracker is not None:
+                    self._activity_tracker.observe_event(event)
 
-                event_type = event_response.event.WhichOneof("event_type")
+                event_type = event.WhichOneof("event_type")
                 if event_type != "robot_state":
                     continue
 
-                return _derive_activity_from_robot_state(
-                    event_response.event.robot_state
-                )
+                if self._activity_tracker is not None:
+                    activity = self._activity_tracker.activity_from_robot_state(
+                        event.robot_state
+                    )
+                    return _normalize_activity_state(activity)
+
+                return _derive_activity_from_robot_state(event.robot_state)
         finally:
             stream.cancel()
 
@@ -310,12 +322,24 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                     if event_response is None or not event_response.HasField("event"):
                         continue
 
-                    event_type = event_response.event.WhichOneof("event_type")
+                    event = event_response.event
+                    if self._activity_tracker is not None:
+                        self._activity_tracker.observe_event(event)
+                    event_type = event.WhichOneof("event_type")
 
                     has_changes = False
                     if event_type == "robot_state":
-                        robot_state = event_response.event.robot_state
-                        next_activity = _derive_activity_from_robot_state(robot_state)
+                        robot_state = event.robot_state
+                        if self._activity_tracker is not None:
+                            next_activity = _normalize_activity_state(
+                                self._activity_tracker.activity_from_robot_state(
+                                    robot_state
+                                )
+                            )
+                        else:
+                            next_activity = _derive_activity_from_robot_state(
+                                robot_state
+                            )
                         next_charging = _charging_from_robot_state(robot_state)
 
                         if next_activity != self.current_activity:
@@ -768,8 +792,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
 
     def set_current_activity(self, activity: str | None) -> None:
         """Set current activity and notify entities."""
-        normalized = (activity or "").strip().lower()
-        self.current_activity = normalized or STATE_UNKNOWN
+        self.current_activity = _normalize_activity_state(activity)
         self.async_set_updated_data(None)
 
 
@@ -806,6 +829,25 @@ def _derive_activity_from_robot_state(robot_state: Any) -> str:
         return "on_charger"
 
     return "idle"
+
+
+def _normalize_activity_state(activity: str | None) -> str:
+    normalized = (activity or "").strip().lower().replace("-", "_")
+    if not normalized:
+        return STATE_UNKNOWN
+
+    aliases: dict[str, str] = {
+        "exploring from charger": "exploring_from_charger",
+        "looking for faces": "looking_for_faces",
+        "looking for cubes": "looking_for_cubes",
+        "looking for objects": "looking_for_objects",
+        "exploring": "exploring",
+        "idle / standing still": "idle",
+        "standing still while carrying an object": "carrying_object",
+        "being touched": "being_touched",
+        "on charger": "on_charger",
+    }
+    return aliases.get(normalized, normalized)
 
 
 def _charging_from_robot_state(robot_state: Any) -> bool:
