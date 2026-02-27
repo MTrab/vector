@@ -1,13 +1,12 @@
 say_text:
   name: Say Text
   description: Make Vector speak text via the robot TTS engine.
+  target:
+    device:
+      integration: vector
   fields:
     text:
       required: true
-      selector:
-        text:
-    entry_id:
-      required: false
       selector:
         text:
     use_vector_voice:

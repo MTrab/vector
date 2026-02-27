@@ -7,15 +7,15 @@ from typing import TypedDict
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, device_registry as dr
 
 from .const import PLATFORMS
 from .coordinator import VectorCoordinator
 from .const import (
     ATTR_DURATION_SCALAR,
-    ATTR_ENTRY_ID,
     ATTR_PITCH_SCALAR,
     ATTR_TEXT,
     ATTR_USE_VECTOR_VOICE,
@@ -42,7 +42,7 @@ class VectorDomainData(TypedDict):
 _SAY_TEXT_SERVICE_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_TEXT): cv.string,
-        vol.Optional(ATTR_ENTRY_ID): cv.string,
+        vol.Optional(ATTR_DEVICE_ID): cv.string,
         vol.Optional(ATTR_USE_VECTOR_VOICE, default=True): cv.boolean,
         vol.Optional(ATTR_DURATION_SCALAR, default=1.0): vol.Coerce(float),
         vol.Optional(ATTR_PITCH_SCALAR, default=0.0): vol.Coerce(float),
@@ -59,20 +59,38 @@ def _get_or_create_domain_data(hass: HomeAssistant) -> VectorDomainData:
 
 def _resolve_target_coordinator(
     *,
+    hass: HomeAssistant,
     coordinators: dict[str, VectorCoordinator],
-    entry_id: str | None,
+    device_id: str | None,
 ) -> VectorCoordinator:
-    if entry_id is not None:
-        coordinator = coordinators.get(entry_id)
-        if coordinator is None:
-            raise ServiceValidationError(f"Unknown entry_id: {entry_id}")
+    if device_id is not None:
+        device_registry = dr.async_get(hass)
+        device = device_registry.async_get(device_id)
+        if device is None:
+            raise ServiceValidationError(f"Unknown device_id: {device_id}")
+
+        matching_entry_ids = [
+            config_entry_id
+            for config_entry_id in device.config_entries
+            if config_entry_id in coordinators
+        ]
+        if not matching_entry_ids:
+            raise ServiceValidationError(
+                f"Device {device_id} is not associated with a configured Vector entry."
+            )
+        if len(matching_entry_ids) > 1:
+            raise ServiceValidationError(
+                f"Device {device_id} maps to multiple Vector entries."
+            )
+
+        coordinator = coordinators[matching_entry_ids[0]]
         return coordinator
 
     if len(coordinators) == 1:
         return next(iter(coordinators.values()))
 
     raise ServiceValidationError(
-        "Multiple Vector entries configured. Provide entry_id."
+        "Multiple Vector entries configured. Provide device_id."
     )
 
 
@@ -82,9 +100,10 @@ async def _async_handle_say_text_service(
 ) -> None:
     domain_data = _get_or_create_domain_data(hass)
     coordinator = _resolve_target_coordinator(
+        hass=hass,
         coordinators=domain_data["coordinators"],
-        entry_id=call_data.get(ATTR_ENTRY_ID)
-        if isinstance(call_data.get(ATTR_ENTRY_ID), str)
+        device_id=call_data.get(ATTR_DEVICE_ID)
+        if isinstance(call_data.get(ATTR_DEVICE_ID), str)
         else None,
     )
 
