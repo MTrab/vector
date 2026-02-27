@@ -483,12 +483,23 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
 
                 # Some firmware variants require active behavior-control stream
                 # during direct SayText calls.
-                if await self._async_say_text_with_behavior_control(
-                    client,
-                    messaging,
-                    request,
-                ):
-                    return
+                priorities: list[int] = []
+                if hasattr(messaging.protocol.ControlRequest, "OVERRIDE_BEHAVIORS"):
+                    priorities.append(
+                        messaging.protocol.ControlRequest.OVERRIDE_BEHAVIORS
+                    )
+                priorities.append(messaging.protocol.ControlRequest.DEFAULT)
+                if hasattr(messaging.protocol.ControlRequest, "RESERVE_CONTROL"):
+                    priorities.append(messaging.protocol.ControlRequest.RESERVE_CONTROL)
+
+                for priority in priorities:
+                    if await self._async_say_text_with_behavior_control(
+                        client,
+                        messaging,
+                        request,
+                        priority=priority,
+                    ):
+                        return
 
         if last_error is not None:
             raise last_error
@@ -498,6 +509,8 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         client: Any,
         messaging: Any,
         say_text_request: Any,
+        *,
+        priority: int,
     ) -> bool:
         """Try SayText while holding a live behavior-control stream."""
         if not hasattr(client.stub, "BehaviorControl"):
@@ -512,7 +525,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             await stream.write(
                 messaging.protocol.BehaviorControlRequest(
                     control_request=messaging.protocol.ControlRequest(
-                        priority=messaging.protocol.ControlRequest.DEFAULT,
+                        priority=priority,
                     )
                 )
             )

@@ -226,6 +226,8 @@ def test_say_text_retries_after_behavior_control_when_robot_returns_failed_to_sa
 
     class FakeControlRequest:
         DEFAULT = 20
+        OVERRIDE_BEHAVIORS = 10
+        RESERVE_CONTROL = 30
 
         def __init__(self, *, priority: int) -> None:
             self.priority = priority
