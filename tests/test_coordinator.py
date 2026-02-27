@@ -237,7 +237,7 @@ def test_resolve_provision_mode_rejects_partial_credentials() -> None:
 
 
 def test_resolve_provision_mode_rejects_missing_serial_in_official_mode() -> None:
-    """Serial is required in all modes."""
+    """Official mode requires serial when credentials are provided."""
     try:
         _resolve_provision_mode(
             serial=None,
@@ -250,18 +250,9 @@ def test_resolve_provision_mode_rejects_missing_serial_in_official_mode() -> Non
         raise AssertionError("Expected ValueError when official mode misses serial")
 
 
-def test_resolve_provision_mode_rejects_missing_serial_in_wirepod_mode() -> None:
-    """Wire-pod mode also requires serial."""
-    try:
-        _resolve_provision_mode(
-            serial=None,
-            email=None,
-            password=None,
-        )
-    except ValueError as err:
-        assert "serial" in str(err).lower()
-    else:
-        raise AssertionError("Expected ValueError when wire-pod mode misses serial")
+def test_resolve_provision_mode_allows_missing_serial_in_wirepod_mode() -> None:
+    """Wire-pod mode should work without serial when no credentials are provided."""
+    assert _resolve_provision_mode(serial=None, email=None, password=None) == "wirepod"
 
 
 def test_trigger_quick_action_rejects_unknown_action() -> None:
