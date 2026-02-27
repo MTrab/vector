@@ -445,16 +445,44 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             raise ValueError("pitch_scalar must be between -1.0 and 1.0")
 
         client, messaging = await self._async_get_client()
-        await client.rpc(
-            "SayText",
-            messaging.protocol.SayTextRequest(
-                text=normalized_text,
-                use_vector_voice=bool(use_vector_voice),
-                duration_scalar=float(duration_scalar),
-                pitch_scalar=float(pitch_scalar),
-            ),
-            timeout=_DEFAULT_TIMEOUT_SECONDS,
-        )
+        request_variants: list[Any] = []
+        primary_kwargs: dict[str, Any] = {
+            "text": normalized_text,
+            "use_vector_voice": bool(use_vector_voice),
+            "duration_scalar": float(duration_scalar),
+        }
+        if pitch_scalar != 0.0:
+            primary_kwargs["pitch_scalar"] = float(pitch_scalar)
+        request_variants.append(messaging.protocol.SayTextRequest(**primary_kwargs))
+
+        if use_vector_voice:
+            request_variants.append(
+                messaging.protocol.SayTextRequest(
+                    text=normalized_text,
+                    use_vector_voice=False,
+                    duration_scalar=float(duration_scalar),
+                )
+            )
+
+        request_variants.append(messaging.protocol.SayTextRequest(text=normalized_text))
+
+        last_error: Exception | None = None
+        for request in request_variants:
+            try:
+                await client.rpc(
+                    "SayText",
+                    request,
+                    timeout=_DEFAULT_TIMEOUT_SECONDS,
+                )
+                return
+            except Exception as err:
+                last_error = err
+                details = str(err).lower()
+                if "failed to say text" not in details:
+                    raise
+
+        if last_error is not None:
+            raise last_error
 
     async def async_trigger_quick_action(self, action_key: str) -> None:
         """Trigger one supported quick action intent."""

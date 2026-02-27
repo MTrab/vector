@@ -135,6 +135,8 @@ async def _async_handle_say_text_service(
         )
     except ValueError as err:
         raise ServiceValidationError(str(err)) from err
+    except Exception as err:
+        raise ServiceValidationError(f"Vector failed to say text: {err}") from err
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
