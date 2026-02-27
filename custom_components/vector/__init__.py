@@ -3,20 +3,27 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TypedDict
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import DOMAIN, PLATFORMS
+from .const import PLATFORMS
 from .coordinator import VectorCoordinator
 
 _SETUP_VALIDATION_TIMEOUT_SECONDS = 20.0
 
 
+class VectorRuntimeData(TypedDict):
+    """Runtime data stored on config entries."""
+
+    coordinator: VectorCoordinator
+    start_task: asyncio.Task[None] | None
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Vector from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
     coordinator = VectorCoordinator(hass, entry)
 
     try:
@@ -35,8 +42,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             f"Failed to validate Vector connection: {err}"
         ) from err
 
-    hass.data[DOMAIN][entry.entry_id] = {
-        "config": dict(entry.data),
+    entry.runtime_data = {
         "coordinator": coordinator,
         "start_task": None,
     }
@@ -46,20 +52,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator.async_start_runtime(),
         name=f"vector_start_{entry.entry_id}",
     )
-    hass.data[DOMAIN][entry.entry_id]["start_task"] = start_task
+    entry.runtime_data["start_task"] = start_task
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok and DOMAIN in hass.data:
-        entry_data = hass.data[DOMAIN].pop(entry.entry_id, None)
-        if entry_data:
-            start_task = entry_data.get("start_task")
+    if unload_ok:
+        runtime_data: VectorRuntimeData | None = entry.runtime_data
+        if runtime_data:
+            start_task = runtime_data.get("start_task")
             if start_task is not None:
                 start_task.cancel()
-            coordinator: VectorCoordinator | None = entry_data.get("coordinator")
+            coordinator = runtime_data.get("coordinator")
             if coordinator is not None:
                 await coordinator.async_shutdown()
+            entry.runtime_data = None
     return unload_ok
