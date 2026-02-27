@@ -104,7 +104,7 @@
           "description": "Text for Vector to speak."
         },
         "device_id": {
-          "name": "Device",
+          "name": "Vector Robot",
           "description": "Target Vector device. Required when multiple Vector devices are configured."
         },
         "use_vector_voice": {
