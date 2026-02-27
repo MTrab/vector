@@ -42,7 +42,7 @@ class VectorDomainData(TypedDict):
 _SAY_TEXT_SERVICE_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_TEXT): cv.string,
-        vol.Optional(ATTR_DEVICE_ID): vol.Any(None, cv.string),
+        vol.Optional(ATTR_DEVICE_ID): vol.Any(None, cv.string, [cv.string]),
         vol.Optional(ATTR_USE_VECTOR_VOICE, default=True): cv.boolean,
         vol.Optional(ATTR_DURATION_SCALAR, default=1.0): vol.Coerce(float),
         vol.Optional(ATTR_PITCH_SCALAR, default=0.0): vol.Coerce(float),
@@ -94,17 +94,32 @@ def _resolve_target_coordinator(
     )
 
 
+def _extract_device_id(call_data: dict[str, str | bool | float | list[str] | None]) -> str | None:
+    raw = call_data.get(ATTR_DEVICE_ID)
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, list):
+        if not raw:
+            return None
+        if len(raw) > 1:
+            raise ServiceValidationError(
+                "Select exactly one Vector device for this action."
+            )
+        return raw[0]
+    raise ServiceValidationError("device_id must be a string or list of one string")
+
+
 async def _async_handle_say_text_service(
     hass: HomeAssistant,
-    call_data: dict[str, str | bool | float],
+    call_data: dict[str, str | bool | float | list[str] | None],
 ) -> None:
     domain_data = _get_or_create_domain_data(hass)
     coordinator = _resolve_target_coordinator(
         hass=hass,
         coordinators=domain_data["coordinators"],
-        device_id=call_data.get(ATTR_DEVICE_ID)
-        if isinstance(call_data.get(ATTR_DEVICE_ID), str)
-        else None,
+        device_id=_extract_device_id(call_data),
     )
 
     text = call_data[ATTR_TEXT]
