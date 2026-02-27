@@ -466,47 +466,33 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
 
         request_variants.append(messaging.protocol.SayTextRequest(text=normalized_text))
 
+        priorities: list[int] = []
+        if hasattr(messaging.protocol.ControlRequest, "OVERRIDE_BEHAVIORS"):
+            priorities.append(messaging.protocol.ControlRequest.OVERRIDE_BEHAVIORS)
+        priorities.append(messaging.protocol.ControlRequest.DEFAULT)
+        if hasattr(messaging.protocol.ControlRequest, "RESERVE_CONTROL"):
+            priorities.append(messaging.protocol.ControlRequest.RESERVE_CONTROL)
+
         last_error: Exception | None = None
+        for priority in priorities:
+            try:
+                if await self._async_say_text_variants_with_behavior_control(
+                    client,
+                    messaging,
+                    request_variants,
+                    priority=priority,
+                ):
+                    return
+            except Exception as err:
+                last_error = err
+
+        # Final fallback if control stream variants did not succeed.
         for request in request_variants:
             try:
-                await client.rpc(
-                    "SayText",
-                    request,
-                    timeout=_DEFAULT_TIMEOUT_SECONDS,
-                )
+                await client.rpc("SayText", request, timeout=_DEFAULT_TIMEOUT_SECONDS)
                 return
             except Exception as err:
                 last_error = err
-                details = str(err).lower()
-                if "failed to say text" not in details:
-                    raise
-
-                # Some firmware variants require active behavior-control stream
-                # during direct SayText calls.
-                priorities: list[int] = []
-                if hasattr(messaging.protocol.ControlRequest, "OVERRIDE_BEHAVIORS"):
-                    priorities.append(
-                        messaging.protocol.ControlRequest.OVERRIDE_BEHAVIORS
-                    )
-                priorities.append(messaging.protocol.ControlRequest.DEFAULT)
-                if hasattr(messaging.protocol.ControlRequest, "RESERVE_CONTROL"):
-                    priorities.append(messaging.protocol.ControlRequest.RESERVE_CONTROL)
-
-                for priority in priorities:
-                    if await self._async_say_text_with_behavior_control(
-                        client,
-                        messaging,
-                        request,
-                        priority=priority,
-                    ):
-                        return
-                    if await self._async_say_text_with_assume_behavior_control(
-                        client,
-                        messaging,
-                        request,
-                        priority=priority,
-                    ):
-                        return
 
         if last_error is not None:
             raise last_error
@@ -589,6 +575,86 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 except Exception:
                     pass
 
+                stream.cancel()
+
+    async def _async_say_text_variants_with_behavior_control(
+        self,
+        client: Any,
+        messaging: Any,
+        say_text_requests: list[Any],
+        *,
+        priority: int,
+    ) -> bool:
+        """Request behavior control first, then try SayText variants under control."""
+        if not hasattr(client.stub, "BehaviorControl"):
+            return False
+
+        stream = None
+        granted = False
+        try:
+            stream = client.stub.BehaviorControl(timeout=_DEFAULT_TIMEOUT_SECONDS)
+            await stream.write(
+                messaging.protocol.BehaviorControlRequest(
+                    control_request=messaging.protocol.ControlRequest(priority=priority)
+                )
+            )
+
+            for _ in range(5):
+                response = await asyncio.wait_for(
+                    stream.read(),
+                    timeout=_DEFAULT_TIMEOUT_SECONDS,
+                )
+                if response is None:
+                    continue
+                response_type = response.WhichOneof("response_type")
+                if response_type == "control_granted_response":
+                    granted = True
+                    break
+                if response_type in {"control_lost_event", "reserved_control_lost_event"}:
+                    break
+
+            if not granted:
+                return False
+
+            last_error: Exception | None = None
+            for request in say_text_requests:
+                try:
+                    await client.rpc("SayText", request, timeout=_DEFAULT_TIMEOUT_SECONDS)
+                    return True
+                except Exception as err:
+                    last_error = err
+                    if "failed to say text" not in str(err).lower():
+                        raise
+
+            if last_error is not None:
+                _LOGGER.debug(
+                    "SayText variants failed while behavior control granted: %s",
+                    last_error,
+                )
+            return False
+        except Exception as err:
+            _LOGGER.debug(
+                "Failed SayText with behavior-control first strategy: %s",
+                err,
+            )
+            return False
+        finally:
+            if stream is not None:
+                try:
+                    await stream.write(
+                        messaging.protocol.BehaviorControlRequest(
+                            control_release=messaging.protocol.ControlRelease(),
+                        )
+                    )
+                except Exception:
+                    _LOGGER.debug(
+                        "Failed sending behavior control release after SayText strategy",
+                        exc_info=True,
+                    )
+                try:
+                    await stream.done_writing()
+                except Exception:
+                    pass
                 stream.cancel()
 
     async def _async_say_text_with_assume_behavior_control(
