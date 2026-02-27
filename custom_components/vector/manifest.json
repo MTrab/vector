@@ -14,7 +14,7 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/MTrab/vector/issues",
   "requirements": [
-    "pyddlvector@git+https://github.com/MTrab/pyddlvector.git@fix/activity-search-target-distinction"
+    "pyddlvector@git+https://github.com/MTrab/pyddlvector.git@main"
   ],
   "version": "0.1.0",
   "zeroconf": [
