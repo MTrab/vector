@@ -42,7 +42,7 @@ class VectorDomainData(TypedDict):
 _SAY_TEXT_SERVICE_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_TEXT): cv.string,
-        vol.Optional(ATTR_DEVICE_ID): cv.string,
+        vol.Optional(ATTR_DEVICE_ID): vol.Any(None, cv.string),
         vol.Optional(ATTR_USE_VECTOR_VOICE, default=True): cv.boolean,
         vol.Optional(ATTR_DURATION_SCALAR, default=1.0): vol.Coerce(float),
         vol.Optional(ATTR_PITCH_SCALAR, default=0.0): vol.Coerce(float),
