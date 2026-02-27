@@ -10,6 +10,7 @@ from custom_components.vector.coordinator import (
     _derive_activity_from_robot_state,
     _extract_camera_frame_bytes,
     _is_unauthenticated_error,
+    _normalize_activity_state,
     _normalize_battery_level_name,
     _normalize_stimulation_snapshot,
     _resolve_provision_mode,
@@ -47,6 +48,13 @@ def test_derive_activity_charging() -> None:
     robot_state = _state(status=0x2000)
 
     assert _derive_activity_from_robot_state(robot_state) == "charging"
+
+
+def test_normalize_activity_state_new_labels() -> None:
+    """New pyddlvector activity labels should map to sensor state keys."""
+    assert _normalize_activity_state("Exploring from charger") == "exploring_from_charger"
+    assert _normalize_activity_state("Looking for faces") == "looking_for_faces"
+    assert _normalize_activity_state("Idle / standing still") == "idle"
 
 
 def test_normalize_battery_level_name() -> None:
