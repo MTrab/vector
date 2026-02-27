@@ -20,6 +20,7 @@ from .const import (
     CONF_SERIAL,
     EXCLUDED_ACTIVITY_STATUS_FLAGS,
     MASTER_VOLUME_OPTIONS,
+    QUICK_ACTION_INTENTS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ _CAMERA_STREAM_READ_TIMEOUT_SECONDS = 30.0
 _CAMERA_RECONNECT_DELAY_SECONDS = 2.0
 _AUTH_BACKOFF_BASE_DELAY_SECONDS = 15.0
 _AUTH_BACKOFF_MAX_DELAY_SECONDS = 300.0
+_APP_INTENT_RPC_PATH = "/Anki.Vector.external_interface.ExternalInterface/AppIntent"
 
 _STATUS_IS_MOVING = 0x1
 _STATUS_IS_CARRYING_BLOCK = 0x2
@@ -423,6 +425,30 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             )
             self.master_volume = str(selected).strip().lower()
             self.async_set_updated_data(None)
+
+    async def async_trigger_quick_action(self, action_key: str) -> None:
+        """Trigger one supported quick action intent."""
+        intent = QUICK_ACTION_INTENTS.get(action_key)
+        if intent is None:
+            raise ValueError(f"Unsupported quick action: {action_key}")
+
+        client, messaging = await self._async_get_client()
+        request = messaging.protocol.AppIntentRequest(intent=intent)
+        if hasattr(client.stub, "AppIntent"):
+            await client.rpc(
+                "AppIntent",
+                request,
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+            )
+            return
+
+        await client.unary_unary(
+            _APP_INTENT_RPC_PATH,
+            request,
+            request_serializer=messaging.protocol.AppIntentRequest.SerializeToString,
+            response_deserializer=messaging.protocol.AppIntentResponse.FromString,
+            timeout=_DEFAULT_TIMEOUT_SECONDS,
+        )
 
     async def async_start_camera_stream(self) -> None:
         """Ensure persistent camera stream task is running."""

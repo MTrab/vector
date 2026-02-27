@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from custom_components.vector.coordinator import (
+    VectorCoordinator,
     _battery_percentage_from_wirepod_curve,
     _derive_activity_from_robot_state,
     _extract_camera_frame_bytes,
@@ -152,3 +153,63 @@ def test_resolve_provision_mode_rejects_missing_serial_in_wirepod_mode() -> None
         assert "serial" in str(err).lower()
     else:
         raise AssertionError("Expected ValueError when wire-pod mode misses serial")
+
+
+def test_trigger_quick_action_rejects_unknown_action() -> None:
+    coordinator = object.__new__(VectorCoordinator)
+
+    try:
+        import asyncio
+
+        asyncio.run(coordinator.async_trigger_quick_action("unknown_action"))
+    except ValueError as err:
+        assert "unsupported quick action" in str(err).lower()
+    else:
+        raise AssertionError("Expected ValueError for unsupported quick action")
+
+
+def test_trigger_quick_action_falls_back_to_unary_path_when_stub_lacks_rpc() -> None:
+    import asyncio
+
+    coordinator = object.__new__(VectorCoordinator)
+
+    class FakeStub:
+        pass
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.stub = FakeStub()
+            self.unary_calls: list[str] = []
+
+        async def unary_unary(self, path: str, request, **kwargs):  # type: ignore[no-untyped-def]
+            del kwargs
+            self.unary_calls.append(path)
+            assert request.intent == "intent_system_sleep"
+            return object()
+
+    class FakeProtocol:
+        class AppIntentRequest:
+            def __init__(self, *, intent: str) -> None:
+                self.intent = intent
+
+            @staticmethod
+            def SerializeToString(_request):  # type: ignore[no-untyped-def]
+                return b""
+
+        class AppIntentResponse:
+            @staticmethod
+            def FromString(_payload: bytes):  # type: ignore[no-untyped-def]
+                return object()
+
+    client = FakeClient()
+    messaging = SimpleNamespace(protocol=FakeProtocol)
+
+    async def _fake_get_client():
+        return client, messaging
+
+    coordinator._async_get_client = _fake_get_client  # type: ignore[attr-defined]
+
+    asyncio.run(coordinator.async_trigger_quick_action("sleep"))
+    assert client.unary_calls == [
+        "/Anki.Vector.external_interface.ExternalInterface/AppIntent"
+    ]
