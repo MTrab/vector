@@ -97,7 +97,9 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self._telemetry_filter: Any | None = None
         self._event_listener_task: asyncio.Task[None] | None = None
         self._camera_stream_task: asyncio.Task[None] | None = None
+        self._wake_enable_stream_task: asyncio.Task[None] | None = None
         self._camera_stream_lock = asyncio.Lock()
+        self._image_stream_enable_lock = asyncio.Lock()
         self._camera_frame_event = asyncio.Event()
         self._settings_lock = asyncio.Lock()
         self._auth_backoff_delay_seconds = _AUTH_BACKOFF_BASE_DELAY_SECONDS
@@ -230,6 +232,15 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             finally:
                 self._camera_stream_task = None
 
+        if self._wake_enable_stream_task is not None:
+            self._wake_enable_stream_task.cancel()
+            try:
+                await self._wake_enable_stream_task
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self._wake_enable_stream_task = None
+
         if self._client is None:
             return
         try:
@@ -340,6 +351,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                     has_changes = False
                     if event_type == "robot_state":
                         robot_state = event.robot_state
+                        previous_activity = self.current_activity
                         if self._activity_tracker is not None:
                             next_activity = _normalize_activity_state(
                                 self._activity_tracker.activity_from_robot_state(
@@ -365,6 +377,11 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                         if next_activity != self.current_activity:
                             self.current_activity = next_activity
                             has_changes = True
+                            if (
+                                previous_activity == "sleeping"
+                                and next_activity != "sleeping"
+                            ):
+                                self._async_schedule_enable_image_streaming_on_wake()
                         if next_charging != self.is_charging:
                             self.is_charging = next_charging
                             has_changes = True
@@ -738,21 +755,49 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         if request_cls is None:
             return
 
-        request_kwargs: dict[str, Any] = {"enable": True}
-        descriptor = getattr(request_cls, "DESCRIPTOR", None)
-        fields_by_name = getattr(descriptor, "fields_by_name", {})
-        if "enable_high_resolution" in fields_by_name:
-            request_kwargs["enable_high_resolution"] = False
+        async with self._image_stream_enable_lock:
+            if self.current_activity == "sleeping":
+                return
 
+            request_kwargs: dict[str, Any] = {"enable": True}
+            descriptor = getattr(request_cls, "DESCRIPTOR", None)
+            fields_by_name = getattr(descriptor, "fields_by_name", {})
+            if "enable_high_resolution" in fields_by_name:
+                request_kwargs["enable_high_resolution"] = False
+
+            try:
+                request = request_cls(**request_kwargs)
+                await client.rpc(
+                    "EnableImageStreaming",
+                    request,
+                    timeout=_DEFAULT_TIMEOUT_SECONDS,
+                )
+            except Exception as err:
+                _LOGGER.debug("Failed to enable image streaming: %s", err)
+
+    def _async_schedule_enable_image_streaming_on_wake(self) -> None:
+        """Schedule one image-stream enable attempt after wake transitions."""
+        if (
+            self._wake_enable_stream_task is not None
+            and not self._wake_enable_stream_task.done()
+        ):
+            return
+        self._wake_enable_stream_task = self.hass.async_create_background_task(
+            self._async_enable_image_streaming_on_wake(),
+            name=f"vector_wake_enable_stream_{self.entry.entry_id}",
+        )
+
+    async def _async_enable_image_streaming_on_wake(self) -> None:
+        """Try enabling image streaming once after waking up."""
         try:
-            request = request_cls(**request_kwargs)
-            await client.rpc(
-                "EnableImageStreaming",
-                request,
-                timeout=_DEFAULT_TIMEOUT_SECONDS,
-            )
+            client, messaging = await self._async_get_client()
+            await self._async_enable_image_streaming(client, messaging)
+        except asyncio.CancelledError:
+            raise
         except Exception as err:
-            _LOGGER.debug("Failed to enable image streaming: %s", err)
+            _LOGGER.debug("Failed scheduling wake image stream enable: %s", err)
+        finally:
+            self._wake_enable_stream_task = None
 
     def _update_stimulation_from_event(self, stimulation_info: Any) -> bool:
         pyddlvector = self._pyddlvector

@@ -496,3 +496,36 @@ def test_enable_image_streaming_skips_when_sleeping() -> None:
 
     asyncio.run(coordinator._async_enable_image_streaming(client, messaging))
     assert client.calls == 0
+
+
+def test_schedule_enable_image_streaming_on_wake_deduplicates() -> None:
+    import asyncio
+
+    coordinator = object.__new__(VectorCoordinator)
+    coordinator.entry = SimpleNamespace(entry_id="entry-1")
+    coordinator._wake_enable_stream_task = None
+    calls = {"count": 0}
+    gate = asyncio.Event()
+
+    async def _fake_enable_on_wake():
+        calls["count"] += 1
+        await gate.wait()
+
+    class FakeHass:
+        def async_create_background_task(self, coro, name):  # type: ignore[no-untyped-def]
+            del name
+            return asyncio.create_task(coro)
+
+    coordinator.hass = FakeHass()
+    coordinator._async_enable_image_streaming_on_wake = _fake_enable_on_wake  # type: ignore[attr-defined]
+
+    async def _run() -> None:
+        coordinator._async_schedule_enable_image_streaming_on_wake()
+        coordinator._async_schedule_enable_image_streaming_on_wake()
+        await asyncio.sleep(0)
+        assert calls["count"] == 1
+        gate.set()
+        if coordinator._wake_enable_stream_task is not None:
+            await coordinator._wake_enable_stream_task
+
+    asyncio.run(_run())
