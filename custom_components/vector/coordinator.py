@@ -144,6 +144,9 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         """Validate robot connectivity/auth for config entry setup."""
         client, messaging = await self._async_get_client()
         await self._async_read_battery_state(client, messaging)
+        self.firmware_version = await self._async_read_firmware_version(
+            client, messaging
+        )
 
     async def async_start_event_listener(self) -> None:
         """Start persistent push listener from robot event stream."""
