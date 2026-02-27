@@ -166,6 +166,34 @@ def test_extract_robot_telemetry_snapshot_uses_filter_process() -> None:
     assert second == (None, None, None, None)
 
 
+def test_validate_connection_sets_firmware_version() -> None:
+    """Setup validation should preload firmware for device info registration."""
+    import asyncio
+
+    coordinator = object.__new__(VectorCoordinator)
+    coordinator.firmware_version = None
+
+    client = object()
+    messaging = object()
+
+    async def _fake_get_client():
+        return client, messaging
+
+    async def _fake_read_battery_state(_client, _messaging):  # type: ignore[no-untyped-def]
+        return 3.9, "nominal", False
+
+    async def _fake_read_firmware_version(_client, _messaging):  # type: ignore[no-untyped-def]
+        return "2.1.3"
+
+    coordinator._async_get_client = _fake_get_client  # type: ignore[attr-defined]
+    coordinator._async_read_battery_state = _fake_read_battery_state  # type: ignore[attr-defined]
+    coordinator._async_read_firmware_version = _fake_read_firmware_version  # type: ignore[attr-defined]
+
+    asyncio.run(coordinator.async_validate_connection())
+
+    assert coordinator.firmware_version == "2.1.3"
+
+
 def test_is_unauthenticated_error_from_string() -> None:
     """Authentication failures should be recognized from exception text."""
     err = RuntimeError(
