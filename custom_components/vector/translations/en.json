@@ -33,6 +33,26 @@
           "medium_high": "Medium High",
           "high": "High"
         }
+      },
+      "eye_color_preset": {
+        "name": "Eye color preset",
+        "state": {
+          "teal": "Teal",
+          "orange": "Orange",
+          "yellow": "Yellow",
+          "lime_green": "Lime Green",
+          "azure_blue": "Azure Blue",
+          "purple": "Purple",
+          "other_green": "Other Green"
+        }
+      }
+    },
+    "number": {
+      "custom_eye_color_hue": {
+        "name": "Custom eye color hue"
+      },
+      "custom_eye_color_saturation": {
+        "name": "Custom eye color saturation"
       }
     },
     "sensor": {

@@ -8,6 +8,7 @@ DOMAIN = "vector"
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
     Platform.SELECT,
+    Platform.NUMBER,
     Platform.BUTTON,
     Platform.CAMERA,
 ]
@@ -45,6 +46,16 @@ QUICK_ACTION_INTENTS: dict[str, str] = {
     "dance": "intent_imperative_dance",
     "fetch_cube": "intent_imperative_fetchcube",
 }
+
+EYE_COLOR_PRESET_OPTIONS: tuple[str, ...] = (
+    "teal",
+    "orange",
+    "yellow",
+    "lime_green",
+    "azure_blue",
+    "purple",
+    "other_green",
+)
 
 SERVICE_SAY_TEXT = "say_text"
 ATTR_ENTRY_ID = "entry_id"

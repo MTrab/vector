@@ -6,7 +6,10 @@ import asyncio
 from types import SimpleNamespace
 
 from custom_components.vector.const import CONF_HOST, CONF_ROBOT_NAME
-from custom_components.vector.select import VectorMasterVolumeSelect
+from custom_components.vector.select import (
+    VectorEyeColorPresetSelect,
+    VectorMasterVolumeSelect,
+)
 
 
 class FakeCoordinator:
@@ -14,7 +17,9 @@ class FakeCoordinator:
 
     def __init__(self, master_volume: str | None = None) -> None:
         self.master_volume = master_volume
+        self.eye_color_preset: str | None = None
         self.calls: list[str] = []
+        self.eye_calls: list[str] = []
 
     def async_add_listener(self, update_callback):
         del update_callback
@@ -23,6 +28,10 @@ class FakeCoordinator:
     async def async_set_master_volume(self, value: str) -> None:
         self.calls.append(value)
         self.master_volume = value
+
+    async def async_set_eye_color_preset(self, value: str) -> None:
+        self.eye_calls.append(value)
+        self.eye_color_preset = value
 
 
 def _entry(data: dict[str, str], entry_id: str = "entry-1") -> SimpleNamespace:
@@ -47,3 +56,24 @@ def test_master_volume_select_sets_option_via_coordinator() -> None:
 
     assert coordinator.calls == ["high"]
     assert coordinator.master_volume == "high"
+
+
+def test_eye_color_select_maps_current_option_and_is_disabled_by_default() -> None:
+    coordinator = FakeCoordinator(master_volume="medium_low")
+    coordinator.eye_color_preset = "purple"
+    entry = _entry({CONF_ROBOT_NAME: "Vector-ABCD", CONF_HOST: "192.168.1.10"})
+    entity = VectorEyeColorPresetSelect(coordinator, entry)
+
+    assert entity.current_option == "purple"
+    assert entity.entity_registry_enabled_default is False
+
+
+def test_eye_color_select_sets_option_via_coordinator() -> None:
+    coordinator = FakeCoordinator(master_volume="low")
+    entry = _entry({CONF_ROBOT_NAME: "Vector-ABCD", CONF_HOST: "192.168.1.10"})
+    entity = VectorEyeColorPresetSelect(coordinator, entry)
+
+    asyncio.run(entity.async_select_option("azure_blue"))
+
+    assert coordinator.eye_calls == ["azure_blue"]
+    assert coordinator.eye_color_preset == "azure_blue"
