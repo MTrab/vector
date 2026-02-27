@@ -166,3 +166,50 @@ def test_trigger_quick_action_rejects_unknown_action() -> None:
         assert "unsupported quick action" in str(err).lower()
     else:
         raise AssertionError("Expected ValueError for unsupported quick action")
+
+
+def test_trigger_quick_action_falls_back_to_unary_path_when_stub_lacks_rpc() -> None:
+    import asyncio
+
+    coordinator = object.__new__(VectorCoordinator)
+
+    class FakeStub:
+        pass
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.stub = FakeStub()
+            self.unary_calls: list[str] = []
+
+        async def unary_unary(self, path: str, request, **kwargs):  # type: ignore[no-untyped-def]
+            del kwargs
+            self.unary_calls.append(path)
+            assert request.intent == "intent_system_sleep"
+            return object()
+
+    class FakeProtocol:
+        class AppIntentRequest:
+            def __init__(self, *, intent: str) -> None:
+                self.intent = intent
+
+            @staticmethod
+            def SerializeToString(_request):  # type: ignore[no-untyped-def]
+                return b""
+
+        class AppIntentResponse:
+            @staticmethod
+            def FromString(_payload: bytes):  # type: ignore[no-untyped-def]
+                return object()
+
+    client = FakeClient()
+    messaging = SimpleNamespace(protocol=FakeProtocol)
+
+    async def _fake_get_client():
+        return client, messaging
+
+    coordinator._async_get_client = _fake_get_client  # type: ignore[attr-defined]
+
+    asyncio.run(coordinator.async_trigger_quick_action("sleep"))
+    assert client.unary_calls == [
+        "/Anki.Vector.external_interface.ExternalInterface/AppIntent"
+    ]

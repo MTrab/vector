@@ -36,6 +36,7 @@ _CAMERA_STREAM_READ_TIMEOUT_SECONDS = 30.0
 _CAMERA_RECONNECT_DELAY_SECONDS = 2.0
 _AUTH_BACKOFF_BASE_DELAY_SECONDS = 15.0
 _AUTH_BACKOFF_MAX_DELAY_SECONDS = 300.0
+_APP_INTENT_RPC_PATH = "/Anki.Vector.external_interface.ExternalInterface/AppIntent"
 
 _STATUS_IS_MOVING = 0x1
 _STATUS_IS_CARRYING_BLOCK = 0x2
@@ -432,9 +433,20 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             raise ValueError(f"Unsupported quick action: {action_key}")
 
         client, messaging = await self._async_get_client()
-        await client.rpc(
-            "AppIntent",
-            messaging.protocol.AppIntentRequest(intent=intent),
+        request = messaging.protocol.AppIntentRequest(intent=intent)
+        if hasattr(client.stub, "AppIntent"):
+            await client.rpc(
+                "AppIntent",
+                request,
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+            )
+            return
+
+        await client.unary_unary(
+            _APP_INTENT_RPC_PATH,
+            request,
+            request_serializer=messaging.protocol.AppIntentRequest.SerializeToString,
+            response_deserializer=messaging.protocol.AppIntentResponse.FromString,
             timeout=_DEFAULT_TIMEOUT_SECONDS,
         )
 
