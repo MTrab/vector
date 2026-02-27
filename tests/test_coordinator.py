@@ -299,3 +299,55 @@ def test_say_text_uses_behavior_control_before_sending_request() -> None:
 
     asyncio.run(coordinator.async_say_text(text="Hej Vector"))
     assert client.say_text_calls == 1
+
+
+def test_say_text_retries_after_sleep_when_control_not_granted() -> None:
+    import asyncio
+
+    coordinator = object.__new__(VectorCoordinator)
+    coordinator.current_activity = "sleeping"
+
+    class FakeSayTextRequest:
+        def __init__(self, **kwargs):  # type: ignore[no-untyped-def]
+            self.kwargs = kwargs
+
+    class FakeControlRequest:
+        DEFAULT = 20
+
+    class FakeProtocol:
+        SayTextRequest = FakeSayTextRequest
+        ControlRequest = FakeControlRequest
+
+    class FakeStub:
+        BehaviorControl = object()
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.stub = FakeStub()
+
+    client = FakeClient()
+    messaging = SimpleNamespace(protocol=FakeProtocol)
+
+    async def _fake_get_client():
+        return client, messaging
+
+    calls = {"attempts": 0}
+
+    async def _fake_say_text_with_control(*_args, **_kwargs):
+        calls["attempts"] += 1
+        if calls["attempts"] == 1:
+            raise ValueError("Vector did not grant behavior control for SayText")
+        return None
+
+    async def _wake_then_ready(*, timeout: float):  # noqa: ARG001
+        coordinator.current_activity = "idle"
+        return True
+
+    coordinator._async_get_client = _fake_get_client  # type: ignore[attr-defined]
+    coordinator._async_say_text_with_behavior_control = (  # type: ignore[attr-defined]
+        _fake_say_text_with_control
+    )
+    coordinator._async_wait_until_awake_for_say_text = _wake_then_ready  # type: ignore[attr-defined]
+
+    asyncio.run(coordinator.async_say_text(text="Hej Vector"))
+    assert calls["attempts"] == 2

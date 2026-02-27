@@ -37,6 +37,8 @@ _CAMERA_RECONNECT_DELAY_SECONDS = 2.0
 _AUTH_BACKOFF_BASE_DELAY_SECONDS = 15.0
 _AUTH_BACKOFF_MAX_DELAY_SECONDS = 300.0
 _APP_INTENT_RPC_PATH = "/Anki.Vector.external_interface.ExternalInterface/AppIntent"
+_SAY_TEXT_WAKE_WAIT_TIMEOUT_SECONDS = 120.0
+_SAY_TEXT_WAKE_POLL_INTERVAL_SECONDS = 2.0
 
 _STATUS_IS_MOVING = 0x1
 _STATUS_IS_CARRYING_BLOCK = 0x2
@@ -459,15 +461,40 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             )
 
         if hasattr(client.stub, "BehaviorControl"):
-            await self._async_say_text_with_behavior_control(
-                client,
-                messaging,
-                request,
-                priority=messaging.protocol.ControlRequest.DEFAULT,
-            )
+            try:
+                await self._async_say_text_with_behavior_control(
+                    client,
+                    messaging,
+                    request,
+                    priority=messaging.protocol.ControlRequest.DEFAULT,
+                )
+            except ValueError as err:
+                if (
+                    "did not grant behavior control" not in str(err).lower()
+                    or not await self._async_wait_until_awake_for_say_text(
+                        timeout=_SAY_TEXT_WAKE_WAIT_TIMEOUT_SECONDS
+                    )
+                ):
+                    raise
+                await self._async_say_text_with_behavior_control(
+                    client,
+                    messaging,
+                    request,
+                    priority=messaging.protocol.ControlRequest.DEFAULT,
+                )
             return
 
         await client.rpc("SayText", request, timeout=_DEFAULT_TIMEOUT_SECONDS)
+
+    async def _async_wait_until_awake_for_say_text(self, *, timeout: float) -> bool:
+        """Wait until robot is no longer in sleeping activity state."""
+        elapsed = 0.0
+        while elapsed < timeout:
+            if self.current_activity != "sleeping":
+                return True
+            await asyncio.sleep(_SAY_TEXT_WAKE_POLL_INTERVAL_SECONDS)
+            elapsed += _SAY_TEXT_WAKE_POLL_INTERVAL_SECONDS
+        return self.current_activity != "sleeping"
 
     async def _async_say_text_with_behavior_control(
         self,
