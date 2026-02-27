@@ -712,7 +712,15 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 if _is_unauthenticated_error(err):
                     await self._async_handle_auth_failure("camera stream", err)
                     continue
-                _LOGGER.warning("Vector camera stream interrupted: %s", err)
+                details = str(err).strip()
+                if details:
+                    _LOGGER.debug("Vector camera stream interrupted: %s", details)
+                else:
+                    _LOGGER.debug(
+                        "Vector camera stream interrupted (%s)",
+                        err.__class__.__name__,
+                        exc_info=True,
+                    )
                 await asyncio.sleep(_CAMERA_RECONNECT_DELAY_SECONDS)
             finally:
                 if stream is not None:
