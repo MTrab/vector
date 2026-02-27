@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-from homeassistant.const import ATTR_ENTITY_ID
+from homeassistant.const import ATTR_ENTITY_ID, Platform
 
 DOMAIN = "vector"
-PLATFORMS: list[str] = ["sensor", "select", "button", "camera"]
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.SELECT,
+    Platform.BUTTON,
+    Platform.CAMERA,
+]
 
 CONF_HOST = "host"
 CONF_ROBOT_NAME = "robot_name"
