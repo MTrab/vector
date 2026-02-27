@@ -275,12 +275,14 @@ def test_say_text_uses_behavior_control_before_sending_request() -> None:
         def __init__(self) -> None:
             self.stub = FakeStub()
             self.say_text_calls = 0
+            self.last_request = None
 
         async def rpc(self, method_name: str, request, timeout):  # type: ignore[no-untyped-def]
             assert method_name == "SayText"
             assert timeout == 10.0
             assert isinstance(request, FakeSayTextRequest)
             self.say_text_calls += 1
+            self.last_request = request
             return object()
 
     class FakeProtocol:
@@ -297,8 +299,10 @@ def test_say_text_uses_behavior_control_before_sending_request() -> None:
 
     coordinator._async_get_client = _fake_get_client  # type: ignore[attr-defined]
 
-    asyncio.run(coordinator.async_say_text(text="Hej Vector"))
+    asyncio.run(coordinator.async_say_text(text="Hej Vector", pitch_scalar=0.4))
     assert client.say_text_calls == 1
+    assert client.last_request is not None
+    assert client.last_request.kwargs.get("pitch_scalar") == 0.4
 
 
 def test_say_text_retries_after_sleep_when_control_not_granted() -> None:

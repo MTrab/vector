@@ -447,18 +447,14 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             raise ValueError("pitch_scalar must be between -1.0 and 1.0")
 
         client, messaging = await self._async_get_client()
-        request = messaging.protocol.SayTextRequest(
-            text=normalized_text,
-            use_vector_voice=bool(use_vector_voice),
-            duration_scalar=float(duration_scalar),
-        )
-        # Keep legacy validation support for pitch while matching the
-        # stable v1 behavior flow that only sends text/voice/duration.
+        request_kwargs: dict[str, Any] = {
+            "text": normalized_text,
+            "use_vector_voice": bool(use_vector_voice),
+            "duration_scalar": float(duration_scalar),
+        }
         if pitch_scalar != 0.0:
-            _LOGGER.debug(
-                "Ignoring pitch_scalar for SayText parity mode: %s",
-                pitch_scalar,
-            )
+            request_kwargs["pitch_scalar"] = float(pitch_scalar)
+        request = messaging.protocol.SayTextRequest(**request_kwargs)
 
         if hasattr(client.stub, "BehaviorControl"):
             try:
