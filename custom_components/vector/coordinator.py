@@ -841,8 +841,6 @@ def _normalize_activity_state(activity: str | None) -> str:
         "cliff detected": "cliff_detected",
         "being held": "being_held",
         "picked up": "picked_up",
-        "charging on charger": "charging_on_charger",
-        "exploring from charger": "exploring_from_charger",
         "looking for faces": "looking_for_faces",
         "looking for charger": "looking_for_charger",
         "looking for cubes": "looking_for_cubes",
