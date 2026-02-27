@@ -215,7 +215,7 @@ def test_trigger_quick_action_falls_back_to_unary_path_when_stub_lacks_rpc() -> 
     ]
 
 
-def test_say_text_retries_after_behavior_control_when_robot_returns_failed_to_say_text() -> None:
+def test_say_text_uses_behavior_control_before_sending_request() -> None:
     import asyncio
 
     coordinator = object.__new__(VectorCoordinator)
@@ -281,8 +281,6 @@ def test_say_text_retries_after_behavior_control_when_robot_returns_failed_to_sa
             assert timeout == 10.0
             assert isinstance(request, FakeSayTextRequest)
             self.say_text_calls += 1
-            if self.say_text_calls == 1:
-                raise RuntimeError("Failed to say text")
             return object()
 
     class FakeProtocol:
@@ -300,4 +298,4 @@ def test_say_text_retries_after_behavior_control_when_robot_returns_failed_to_sa
     coordinator._async_get_client = _fake_get_client  # type: ignore[attr-defined]
 
     asyncio.run(coordinator.async_say_text(text="Hej Vector"))
-    assert client.say_text_calls == 2
+    assert client.say_text_calls == 1
