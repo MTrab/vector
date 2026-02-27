@@ -529,3 +529,36 @@ def test_schedule_enable_image_streaming_on_wake_deduplicates() -> None:
             await coordinator._wake_enable_stream_task
 
     asyncio.run(_run())
+
+
+def test_schedule_camera_stream_restart_on_wake_deduplicates() -> None:
+    import asyncio
+
+    coordinator = object.__new__(VectorCoordinator)
+    coordinator.entry = SimpleNamespace(entry_id="entry-1")
+    coordinator._wake_camera_restart_task = None
+    calls = {"count": 0}
+    gate = asyncio.Event()
+
+    async def _fake_restart_on_wake():
+        calls["count"] += 1
+        await gate.wait()
+
+    class FakeHass:
+        def async_create_background_task(self, coro, name):  # type: ignore[no-untyped-def]
+            del name
+            return asyncio.create_task(coro)
+
+    coordinator.hass = FakeHass()
+    coordinator._async_restart_camera_stream_on_wake = _fake_restart_on_wake  # type: ignore[attr-defined]
+
+    async def _run() -> None:
+        coordinator._async_schedule_camera_stream_restart_on_wake()
+        coordinator._async_schedule_camera_stream_restart_on_wake()
+        await asyncio.sleep(0)
+        assert calls["count"] == 1
+        gate.set()
+        if coordinator._wake_camera_restart_task is not None:
+            await coordinator._wake_camera_restart_task
+
+    asyncio.run(_run())

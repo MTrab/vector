@@ -98,6 +98,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self._event_listener_task: asyncio.Task[None] | None = None
         self._camera_stream_task: asyncio.Task[None] | None = None
         self._wake_enable_stream_task: asyncio.Task[None] | None = None
+        self._wake_camera_restart_task: asyncio.Task[None] | None = None
         self._camera_stream_lock = asyncio.Lock()
         self._image_stream_enable_lock = asyncio.Lock()
         self._camera_frame_event = asyncio.Event()
@@ -241,6 +242,15 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             finally:
                 self._wake_enable_stream_task = None
 
+        if self._wake_camera_restart_task is not None:
+            self._wake_camera_restart_task.cancel()
+            try:
+                await self._wake_camera_restart_task
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self._wake_camera_restart_task = None
+
         if self._client is None:
             return
         try:
@@ -382,6 +392,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                                 and next_activity != "sleeping"
                             ):
                                 self._async_schedule_enable_image_streaming_on_wake()
+                                self._async_schedule_camera_stream_restart_on_wake()
                         if next_charging != self.is_charging:
                             self.is_charging = next_charging
                             has_changes = True
@@ -793,6 +804,18 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             name=f"vector_wake_enable_stream_{self.entry.entry_id}",
         )
 
+    def _async_schedule_camera_stream_restart_on_wake(self) -> None:
+        """Schedule one camera-stream restart attempt after wake transitions."""
+        if (
+            self._wake_camera_restart_task is not None
+            and not self._wake_camera_restart_task.done()
+        ):
+            return
+        self._wake_camera_restart_task = self.hass.async_create_background_task(
+            self._async_restart_camera_stream_on_wake(),
+            name=f"vector_wake_restart_camera_stream_{self.entry.entry_id}",
+        )
+
     async def _async_enable_image_streaming_on_wake(self) -> None:
         """Try enabling image streaming once after waking up."""
         try:
@@ -804,6 +827,29 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             _LOGGER.debug("Failed scheduling wake image stream enable: %s", err)
         finally:
             self._wake_enable_stream_task = None
+
+    async def _async_restart_camera_stream_on_wake(self) -> None:
+        """Restart running camera stream task to reduce wake-to-frame latency."""
+        try:
+            task = self._camera_stream_task
+            if task is None or task.done():
+                return
+
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self._camera_stream_task = None
+
+            await self.async_start_camera_stream()
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:
+            _LOGGER.debug("Failed restarting camera stream on wake: %s", err)
+        finally:
+            self._wake_camera_restart_task = None
 
     def _update_stimulation_from_event(self, stimulation_info: Any) -> bool:
         pyddlvector = self._pyddlvector
