@@ -931,7 +931,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         if self._robot_config is not None:
             return self._robot_config
 
-        entry_data = self.entry.data
+        entry_data = {**self.entry.data, **self.entry.options}
 
         host = (entry_data.get(CONF_HOST) or "").strip()
         robot_name = (entry_data.get(CONF_ROBOT_NAME) or "").strip()
@@ -1174,15 +1174,14 @@ def _resolve_provision_mode(
     email: str | None,
     password: str | None,
 ) -> str:
-    if not serial:
-        raise ValueError("Serial is required")
-
     has_email = bool(email)
     has_password = bool(password)
 
     if has_email or has_password:
         if not (has_email and has_password):
             raise ValueError("Official mode requires both email and password")
+        if not serial:
+            raise ValueError("Serial is required for official mode")
         return "official"
 
     return "wirepod"

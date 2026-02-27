@@ -18,6 +18,16 @@ class VectorEntity(CoordinatorEntity[VectorCoordinator]):
         super().__init__(coordinator)
         self._entry = entry
 
+    def _entry_value(self, key: str) -> str | None:
+        """Return config value, preferring options over data."""
+        option_value = self._entry.options.get(key)
+        if isinstance(option_value, str):
+            return option_value
+        data_value = self._entry.data.get(key)
+        if isinstance(data_value, str):
+            return data_value
+        return None
+
     @property
     def _serial(self) -> str:
         runtime_serial = self.coordinator.robot_serial
@@ -26,7 +36,7 @@ class VectorEntity(CoordinatorEntity[VectorCoordinator]):
             if normalized_runtime:
                 return normalized_runtime
 
-        entry_serial = self._entry.data.get(CONF_SERIAL)
+        entry_serial = self._entry_value(CONF_SERIAL)
         if isinstance(entry_serial, str):
             return entry_serial.strip().lower()
 
@@ -53,8 +63,12 @@ class VectorEntity(CoordinatorEntity[VectorCoordinator]):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device metadata for this robot."""
-        robot_name = self._entry.data[CONF_ROBOT_NAME]
-        identifier = self._serial or self._entry.data.get(CONF_HOST) or robot_name
+        robot_name = (
+            self._entry_value(CONF_ROBOT_NAME)
+            or self._entry.title
+            or "Vector"
+        )
+        identifier = self._serial or self._entry_value(CONF_HOST) or robot_name
         return DeviceInfo(
             identifiers={(DOMAIN, identifier)},
             name=robot_name,
