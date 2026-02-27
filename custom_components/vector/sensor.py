@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import math
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfTime
+from homeassistant.const import DEGREE, PERCENTAGE, UnitOfLength, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -147,12 +149,12 @@ class VectorStimulationSensor(VectorEntity, SensorEntity):
 
 
 class VectorOrientationRollSensor(VectorEntity, SensorEntity):
-    """Robot roll orientation sensor in radians."""
+    """Robot roll orientation sensor in degrees."""
 
     _attr_has_entity_name = True
     _attr_translation_key = "orientation_roll"
     _attr_icon = "mdi:axis-x-rotate-clockwise"
-    _attr_native_unit_of_measurement = "rad"
+    _attr_native_unit_of_measurement = DEGREE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
@@ -163,16 +165,19 @@ class VectorOrientationRollSensor(VectorEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        return self.coordinator.orientation_roll_rad
+        value = self.coordinator.orientation_roll_rad
+        if value is None:
+            return None
+        return math.degrees(value)
 
 
 class VectorOrientationPitchSensor(VectorEntity, SensorEntity):
-    """Robot pitch orientation sensor in radians."""
+    """Robot pitch orientation sensor in degrees."""
 
     _attr_has_entity_name = True
     _attr_translation_key = "orientation_pitch"
     _attr_icon = "mdi:axis-y-rotate-clockwise"
-    _attr_native_unit_of_measurement = "rad"
+    _attr_native_unit_of_measurement = DEGREE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
@@ -183,16 +188,19 @@ class VectorOrientationPitchSensor(VectorEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        return self.coordinator.orientation_pitch_rad
+        value = self.coordinator.orientation_pitch_rad
+        if value is None:
+            return None
+        return math.degrees(value)
 
 
 class VectorOrientationYawSensor(VectorEntity, SensorEntity):
-    """Robot yaw orientation sensor in radians."""
+    """Robot yaw orientation sensor in degrees."""
 
     _attr_has_entity_name = True
     _attr_translation_key = "orientation_yaw"
     _attr_icon = "mdi:axis-z-rotate-clockwise"
-    _attr_native_unit_of_measurement = "rad"
+    _attr_native_unit_of_measurement = DEGREE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
@@ -203,7 +211,10 @@ class VectorOrientationYawSensor(VectorEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        return self.coordinator.orientation_yaw_rad
+        value = self.coordinator.orientation_yaw_rad
+        if value is None:
+            return None
+        return math.degrees(value)
 
 
 class VectorLiftHeightSensor(VectorEntity, SensorEntity):

@@ -195,9 +195,9 @@ def test_telemetry_sensors_values() -> None:
     )
     entry = _entry({CONF_ROBOT_NAME: "Vector-ABCD", CONF_HOST: "192.168.1.10"})
 
-    assert VectorOrientationRollSensor(coordinator, entry).native_value == 0.1
-    assert VectorOrientationPitchSensor(coordinator, entry).native_value == -0.2
-    assert VectorOrientationYawSensor(coordinator, entry).native_value == 1.57
+    assert round(VectorOrientationRollSensor(coordinator, entry).native_value or 0.0, 3) == 5.73
+    assert round(VectorOrientationPitchSensor(coordinator, entry).native_value or 0.0, 3) == -11.459
+    assert round(VectorOrientationYawSensor(coordinator, entry).native_value or 0.0, 3) == 89.954
     assert VectorLiftHeightSensor(coordinator, entry).native_value == 42.5
 
 
