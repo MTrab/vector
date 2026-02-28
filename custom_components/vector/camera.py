@@ -71,7 +71,7 @@ class VectorNavMapCamera(VectorEntity, Camera):
     _attr_has_entity_name = True
     _attr_translation_key = "nav_map"
     _attr_entity_registry_enabled_default = False
-    _attr_frame_interval = 0.5
+    _attr_frame_interval = 0.2
 
     def __init__(self, coordinator: VectorCoordinator, entry: ConfigEntry) -> None:
         """Initialize Vector nav map camera entity."""
