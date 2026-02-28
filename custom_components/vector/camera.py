@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from homeassistant.components.camera import Camera
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .assets import VectorAsset, VectorAssetHandler
@@ -79,6 +79,27 @@ class VectorNavMapCamera(VectorEntity, Camera):
         VectorEntity.__init__(self, coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_nav_map"
         self.content_type = "image/png"
+        self._unsub_nav_map_listener = None
+
+    async def async_added_to_hass(self) -> None:
+        """Register nav-map update listener for cache-busting token refresh."""
+        await super().async_added_to_hass()
+
+        @callback
+        def _handle_nav_map_frame_update() -> None:
+            self.async_update_token()
+            self.async_write_ha_state()
+
+        self._unsub_nav_map_listener = self.coordinator.async_add_nav_map_listener(
+            _handle_nav_map_frame_update
+        )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Unsubscribe nav-map listener."""
+        if self._unsub_nav_map_listener is not None:
+            self._unsub_nav_map_listener()
+            self._unsub_nav_map_listener = None
+        await super().async_will_remove_from_hass()
 
     async def async_camera_image(
         self,

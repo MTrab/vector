@@ -6,6 +6,7 @@ import asyncio
 import logging
 import math
 import time
+from collections.abc import Callable
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -117,6 +118,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self._image_stream_enable_lock = asyncio.Lock()
         self._camera_frame_event = asyncio.Event()
         self._nav_map_frame_event = asyncio.Event()
+        self._nav_map_listeners: set[Callable[[], None]] = set()
         self._settings_lock = asyncio.Lock()
         self._auth_backoff_delay_seconds = _AUTH_BACKOFF_BASE_DELAY_SECONDS
         self._auth_backoff_lock = asyncio.Lock()
@@ -858,6 +860,20 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
 
         return self.nav_map_frame
 
+    def async_add_nav_map_listener(self, update_callback: Callable[[], None]) -> Callable[[], None]:
+        """Register callback for nav-map frame updates."""
+        self._nav_map_listeners.add(update_callback)
+
+        def _remove_listener() -> None:
+            self._nav_map_listeners.discard(update_callback)
+
+        return _remove_listener
+
+    def _async_notify_nav_map_listeners(self) -> None:
+        """Notify registered nav-map listeners about a new frame."""
+        for update_callback in tuple(self._nav_map_listeners):
+            update_callback()
+
     def _nav_map_robot_pose_provider(self) -> Any | None:
         """Return current robot pose in nav-map coordinates when available."""
         if self._pyddlvector is None:
@@ -892,9 +908,12 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                     frame_bytes = bytes(getattr(frame, "data", b""))
                     if not frame_bytes:
                         continue
+                    if frame_bytes == self.nav_map_frame:
+                        continue
                     self.nav_map_frame = frame_bytes
                     self.nav_map_frame_updated_monotonic = time.monotonic()
                     self._nav_map_frame_event.set()
+                    self._async_notify_nav_map_listeners()
             except asyncio.CancelledError:
                 raise
             except Exception as err:

@@ -18,6 +18,7 @@ class FakeCoordinator:
         self._nav_map_frame = frame
         self.start_calls = 0
         self.nav_map_start_calls = 0
+        self._nav_map_listener = None
 
     def async_add_listener(self, update_callback):
         del update_callback
@@ -40,6 +41,10 @@ class FakeCoordinator:
     ) -> bytes | None:
         del wait_timeout
         return self._nav_map_frame
+
+    def async_add_nav_map_listener(self, update_callback):
+        self._nav_map_listener = update_callback
+        return lambda: None
 
 
 def _entry(data: dict[str, str], entry_id: str = "entry-1") -> SimpleNamespace:
