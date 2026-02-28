@@ -78,12 +78,6 @@ class VectorNavMapCamera(VectorEntity, Camera):
         Camera.__init__(self)
         VectorEntity.__init__(self, coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_nav_map"
-        self._assets = VectorAssetHandler()
-
-    async def async_added_to_hass(self) -> None:
-        """Prepare bundled fallback assets."""
-        await super().async_added_to_hass()
-        await self._assets.async_prepare(self.hass)
 
     async def async_camera_image(
         self,
@@ -93,8 +87,4 @@ class VectorNavMapCamera(VectorEntity, Camera):
         """Return latest nav map PNG frame bytes."""
         del width, height
 
-        frame = await self.coordinator.async_get_latest_nav_map_frame(wait_timeout=1.0)
-        if frame is not None:
-            return frame
-
-        return self._assets.image_bytes(VectorAsset.IMG_UNKNOWN)
+        return await self.coordinator.async_get_latest_nav_map_frame(wait_timeout=1.0)

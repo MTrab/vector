@@ -89,14 +89,13 @@ def test_nav_map_camera_entity_disabled_by_default() -> None:
     assert entity.entity_registry_enabled_default is False
 
 
-def test_nav_map_camera_returns_unknown_asset_when_no_frame() -> None:
+def test_nav_map_camera_returns_none_when_no_frame() -> None:
     coordinator = FakeCoordinator(activity="idle", frame=None)
     entry = _entry({CONF_ROBOT_NAME: "Vector-ABCD", CONF_HOST: "192.168.1.10"})
     entity = VectorNavMapCamera(coordinator, entry)
 
     image = asyncio.run(entity.async_camera_image())
-    assert image is not None
-    assert image.startswith(b"\x89PNG")
+    assert image is None
 
 
 def test_nav_map_camera_returns_live_frame_when_available() -> None:
