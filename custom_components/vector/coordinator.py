@@ -18,6 +18,7 @@ from .const import (
     CONF_HOST,
     CONF_ROBOT_NAME,
     CONF_SERIAL,
+    EYE_COLOR_PRESET_OPTIONS,
     EXCLUDED_ACTIVITY_STATUS_FLAGS,
     MASTER_VOLUME_OPTIONS,
     QUICK_ACTION_INTENTS,
@@ -76,6 +77,10 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self.seconds_petted: int | None = None
         self.distance_moved_cm: int | None = None
         self.master_volume: str | None = None
+        self.eye_color_preset: str | None = None
+        self.eye_color_custom_enabled: bool = False
+        self.eye_color_custom_hue: float | None = None
+        self.eye_color_custom_saturation: float | None = None
         self.stimulation_value: float | None = None
         self.stimulation_velocity: float | None = None
         self.stimulation_accel: float | None = None
@@ -123,6 +128,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             )
             lifetime_stats = await self._async_read_lifetime_stats()
             master_volume = await self._async_read_master_volume()
+            eye_color = await self._async_read_eye_color()
             activity = self.current_activity
         except Exception as err:
             raise UpdateFailed(f"Failed to update Vector activity: {err}") from err
@@ -139,6 +145,24 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             self.seconds_petted = lifetime_stats.seconds_petted
             self.distance_moved_cm = lifetime_stats.distance_moved_cm
         self.master_volume = master_volume
+        if eye_color is not None:
+            preset = str(getattr(eye_color, "preset", "")).strip().lower()
+            self.eye_color_preset = preset or None
+            self.eye_color_custom_enabled = bool(
+                getattr(eye_color, "custom_enabled", False)
+            )
+            custom_hue = getattr(eye_color, "custom_hue", None)
+            custom_saturation = getattr(eye_color, "custom_saturation", None)
+            self.eye_color_custom_hue = (
+                float(custom_hue)
+                if isinstance(custom_hue, (int, float))
+                else None
+            )
+            self.eye_color_custom_saturation = (
+                float(custom_saturation)
+                if isinstance(custom_saturation, (int, float))
+                else None
+            )
         self.current_activity = activity
         self._auth_backoff_delay_seconds = _AUTH_BACKOFF_BASE_DELAY_SECONDS
         return None
@@ -498,6 +522,19 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             return None
         return normalized
 
+    async def _async_read_eye_color(self) -> Any | None:
+        if self._pyddlvector is None or self._client is None:
+            return None
+
+        try:
+            return await self._pyddlvector.fetch_eye_color(
+                self._client,
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+            )
+        except Exception as err:
+            _LOGGER.debug("Failed to read eye color: %s", err)
+            return None
+
     async def async_set_master_volume(self, value: str) -> None:
         """Update robot master volume and push state update."""
         normalized = value.strip().lower()
@@ -675,6 +712,47 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             response_deserializer=messaging.protocol.AppIntentResponse.FromString,
             timeout=_DEFAULT_TIMEOUT_SECONDS,
         )
+
+    async def async_set_eye_color_preset(self, value: str) -> None:
+        """Update robot eye color preset and push state update."""
+        normalized = value.strip().lower()
+        if normalized not in EYE_COLOR_PRESET_OPTIONS:
+            raise ValueError(f"Unsupported eye color preset: {value}")
+
+        async with self._settings_lock:
+            client, _ = await self._async_get_client()
+            pyddlvector, _ = await self._async_get_modules()
+            selected = await pyddlvector.update_eye_color_preset(
+                client,
+                normalized,
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+            )
+            self.eye_color_preset = str(selected).strip().lower()
+            self.eye_color_custom_enabled = False
+            self.async_set_updated_data(None)
+
+    async def async_set_custom_eye_color(
+        self,
+        *,
+        hue: float,
+        saturation: float,
+    ) -> None:
+        """Update robot custom eye color and push state update."""
+        async with self._settings_lock:
+            client, _ = await self._async_get_client()
+            pyddlvector, _ = await self._async_get_modules()
+            normalized_hue, normalized_saturation = (
+                await pyddlvector.update_custom_eye_color(
+                    client,
+                    hue=float(hue),
+                    saturation=float(saturation),
+                    timeout=_DEFAULT_TIMEOUT_SECONDS,
+                )
+            )
+            self.eye_color_custom_enabled = True
+            self.eye_color_custom_hue = float(normalized_hue)
+            self.eye_color_custom_saturation = float(normalized_saturation)
+            self.async_set_updated_data(None)
 
     async def async_start_camera_stream(self) -> None:
         """Ensure persistent camera stream task is running."""

@@ -33,3 +33,16 @@ say_text:
           max: 1.0
           step: 0.05
           mode: box
+
+set_eye_color:
+  name: Set Eye Color
+  description: Set Vector custom eye color using RGB values.
+  fields:
+    rgb_color:
+      required: true
+      selector:
+        color_rgb:
+    device_id:
+      required: false
+      selector:
+        device:

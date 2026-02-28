@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TypedDict
+import colorsys
+from typing import Any, TypedDict
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
@@ -17,9 +18,11 @@ from .coordinator import VectorCoordinator
 from .const import (
     ATTR_DURATION_SCALAR,
     ATTR_PITCH_SCALAR,
+    ATTR_RGB_COLOR,
     ATTR_TEXT,
     ATTR_USE_VECTOR_VOICE,
     DOMAIN,
+    SERVICE_SET_EYE_COLOR,
     SERVICE_SAY_TEXT,
 )
 
@@ -48,6 +51,22 @@ _SAY_TEXT_SERVICE_SCHEMA = vol.Schema(
         vol.Optional(ATTR_PITCH_SCALAR, default=0.0): vol.Coerce(float),
     }
 )
+
+_SET_EYE_COLOR_SERVICE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_RGB_COLOR): vol.ExactSequence(
+            (
+                vol.All(vol.Coerce(int), vol.Range(min=0, max=255)),
+                vol.All(vol.Coerce(int), vol.Range(min=0, max=255)),
+                vol.All(vol.Coerce(int), vol.Range(min=0, max=255)),
+            )
+        ),
+        vol.Optional(ATTR_DEVICE_ID): vol.Any(None, cv.string, [cv.string]),
+    }
+)
+
+
+type ServiceData = dict[str, Any]
 
 
 def _get_or_create_domain_data(hass: HomeAssistant) -> VectorDomainData:
@@ -94,7 +113,7 @@ def _resolve_target_coordinator(
     )
 
 
-def _extract_device_id(call_data: dict[str, str | bool | float | list[str] | None]) -> str | None:
+def _extract_device_id(call_data: ServiceData) -> str | None:
     raw = call_data.get(ATTR_DEVICE_ID)
     if raw is None:
         return None
@@ -111,9 +130,42 @@ def _extract_device_id(call_data: dict[str, str | bool | float | list[str] | Non
     raise ServiceValidationError("device_id must be a string or list of one string")
 
 
+def _extract_rgb_color(call_data: ServiceData) -> tuple[int, int, int]:
+    raw = call_data.get(ATTR_RGB_COLOR)
+    if isinstance(raw, dict):
+        red = raw.get("r", raw.get("red"))
+        green = raw.get("g", raw.get("green"))
+        blue = raw.get("b", raw.get("blue"))
+        channels = [red, green, blue]
+    elif isinstance(raw, (list, tuple)) and len(raw) == 3:
+        channels = list(raw)
+    else:
+        raise ServiceValidationError(
+            "rgb_color must be [red, green, blue] or a mapping with r/g/b values"
+        )
+
+    normalized: list[int] = []
+    for channel in channels:
+        if not isinstance(channel, int) or not (0 <= channel <= 255):
+            raise ServiceValidationError(
+                "rgb_color values must be integers between 0 and 255"
+            )
+        normalized.append(channel)
+    return normalized[0], normalized[1], normalized[2]
+
+
+def _rgb_to_hs_normalized(red: int, green: int, blue: int) -> tuple[float, float]:
+    hue, saturation, _value = colorsys.rgb_to_hsv(
+        red / 255.0,
+        green / 255.0,
+        blue / 255.0,
+    )
+    return float(hue), float(saturation)
+
+
 async def _async_handle_say_text_service(
     hass: HomeAssistant,
-    call_data: dict[str, str | bool | float | list[str] | None],
+    call_data: ServiceData,
 ) -> None:
     domain_data = _get_or_create_domain_data(hass)
     coordinator = _resolve_target_coordinator(
@@ -137,6 +189,31 @@ async def _async_handle_say_text_service(
         raise ServiceValidationError(str(err)) from err
     except Exception as err:
         raise ServiceValidationError(f"Vector failed to say text: {err}") from err
+
+
+async def _async_handle_set_eye_color_service(
+    hass: HomeAssistant,
+    call_data: ServiceData,
+) -> None:
+    domain_data = _get_or_create_domain_data(hass)
+    coordinator = _resolve_target_coordinator(
+        hass=hass,
+        coordinators=domain_data["coordinators"],
+        device_id=_extract_device_id(call_data),
+    )
+
+    red, green, blue = _extract_rgb_color(call_data)
+    hue, saturation = _rgb_to_hs_normalized(red, green, blue)
+
+    try:
+        await coordinator.async_set_custom_eye_color(
+            hue=hue,
+            saturation=saturation,
+        )
+    except ValueError as err:
+        raise ServiceValidationError(str(err)) from err
+    except Exception as err:
+        raise ServiceValidationError(f"Vector failed to set eye color: {err}") from err
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -176,6 +253,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _async_say_text_service,
             schema=_SAY_TEXT_SERVICE_SCHEMA,
         )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_EYE_COLOR):
+        async def _async_set_eye_color_service(call: ServiceCall) -> None:
+            await _async_handle_set_eye_color_service(hass, call.data)
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_EYE_COLOR,
+            _async_set_eye_color_service,
+            schema=_SET_EYE_COLOR_SERVICE_SCHEMA,
+        )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -207,5 +294,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             coordinators.pop(entry.entry_id, None)
             if not coordinators:
                 hass.services.async_remove(DOMAIN, SERVICE_SAY_TEXT)
+                hass.services.async_remove(DOMAIN, SERVICE_SET_EYE_COLOR)
                 hass.data.pop(DOMAIN, None)
     return unload_ok
