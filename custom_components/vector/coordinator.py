@@ -6,6 +6,7 @@ import asyncio
 import logging
 import math
 import time
+from collections.abc import Callable
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -35,6 +36,11 @@ _INITIAL_REFRESH_RETRY_DELAY_SECONDS = 3.0
 _INITIAL_REFRESH_MAX_RETRY_DELAY_SECONDS = 60.0
 _CAMERA_STREAM_READ_TIMEOUT_SECONDS = 30.0
 _CAMERA_RECONNECT_DELAY_SECONDS = 2.0
+_NAV_MAP_WAIT_TIMEOUT_SECONDS = 1.0
+_NAV_MAP_RECONNECT_DELAY_SECONDS = 0.25
+_NAV_MAP_FEED_FREQUENCY_HZ = 10.0
+_NAV_MAP_MAX_SIDE_PIXELS = 256
+_NAV_MAP_MIN_COVERAGE_RATIO = 0.0
 _AUTH_BACKOFF_BASE_DELAY_SECONDS = 15.0
 _AUTH_BACKOFF_MAX_DELAY_SECONDS = 300.0
 _APP_INTENT_RPC_PATH = "/Anki.Vector.external_interface.ExternalInterface/AppIntent"
@@ -94,19 +100,26 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self.lift_height_mm: float | None = None
         self.camera_frame: bytes | None = None
         self.camera_frame_updated_monotonic: float | None = None
+        self.nav_map_frame: bytes | None = None
+        self.nav_map_frame_updated_monotonic: float | None = None
         self._client: Any | None = None
         self._robot_config: Any | None = None
         self._pyddlvector: Any | None = None
         self._messaging: Any | None = None
+        self._latest_robot_state: Any | None = None
         self._activity_tracker: Any | None = None
         self._telemetry_filter: Any | None = None
         self._event_listener_task: asyncio.Task[None] | None = None
         self._camera_stream_task: asyncio.Task[None] | None = None
+        self._nav_map_stream_task: asyncio.Task[None] | None = None
         self._wake_enable_stream_task: asyncio.Task[None] | None = None
         self._wake_camera_restart_task: asyncio.Task[None] | None = None
         self._camera_stream_lock = asyncio.Lock()
+        self._nav_map_stream_lock = asyncio.Lock()
         self._image_stream_enable_lock = asyncio.Lock()
         self._camera_frame_event = asyncio.Event()
+        self._nav_map_frame_event = asyncio.Event()
+        self._nav_map_listeners: set[Callable[[], None]] = set()
         self._settings_lock = asyncio.Lock()
         self._auth_backoff_delay_seconds = _AUTH_BACKOFF_BASE_DELAY_SECONDS
         self._auth_backoff_lock = asyncio.Lock()
@@ -257,6 +270,15 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             finally:
                 self._camera_stream_task = None
 
+        if self._nav_map_stream_task is not None:
+            self._nav_map_stream_task.cancel()
+            try:
+                await self._nav_map_stream_task
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self._nav_map_stream_task = None
+
         if self._wake_enable_stream_task is not None:
             self._wake_enable_stream_task.cancel()
             try:
@@ -385,6 +407,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                     has_changes = False
                     if event_type == "robot_state":
                         robot_state = event.robot_state
+                        self._latest_robot_state = robot_state
                         previous_activity = self.current_activity
                         if self._activity_tracker is not None:
                             next_activity = _normalize_activity_state(
@@ -801,6 +824,117 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             return None
 
         return self.camera_frame
+
+    async def async_start_nav_map_stream(self) -> None:
+        """Ensure persistent nav map stream task is running."""
+        async with self._nav_map_stream_lock:
+            if (
+                self._nav_map_stream_task is not None
+                and not self._nav_map_stream_task.done()
+            ):
+                return
+            self._nav_map_stream_task = self.hass.async_create_background_task(
+                self._async_nav_map_stream_loop(),
+                name=f"vector_nav_map_stream_{self.entry.entry_id}",
+            )
+
+    async def async_get_latest_nav_map_frame(
+        self,
+        *,
+        wait_timeout: float | None = _NAV_MAP_WAIT_TIMEOUT_SECONDS,
+    ) -> bytes | None:
+        """Return latest nav map PNG frame, optionally waiting for first frame."""
+        await self.async_start_nav_map_stream()
+
+        if self.nav_map_frame is not None:
+            return self.nav_map_frame
+
+        try:
+            if wait_timeout is None:
+                await self._nav_map_frame_event.wait()
+            else:
+                await asyncio.wait_for(
+                    self._nav_map_frame_event.wait(), timeout=wait_timeout
+                )
+        except TimeoutError:
+            return None
+
+        return self.nav_map_frame
+
+    def async_add_nav_map_listener(self, update_callback: Callable[[], None]) -> Callable[[], None]:
+        """Register callback for nav-map frame updates."""
+        self._nav_map_listeners.add(update_callback)
+
+        def _remove_listener() -> None:
+            self._nav_map_listeners.discard(update_callback)
+
+        return _remove_listener
+
+    def _async_notify_nav_map_listeners(self) -> None:
+        """Notify registered nav-map listeners about a new frame."""
+        for update_callback in tuple(self._nav_map_listeners):
+            update_callback()
+
+    def _nav_map_robot_pose_provider(self) -> Any | None:
+        """Return current robot pose in nav-map coordinates when available."""
+        if self._pyddlvector is None:
+            return None
+        if not hasattr(self._pyddlvector, "nav_map_robot_pose_from_state"):
+            return None
+        robot_state = self._latest_robot_state
+        if robot_state is None:
+            return None
+        return self._pyddlvector.nav_map_robot_pose_from_state(robot_state)
+
+    async def _async_nav_map_stream_loop(self) -> None:
+        """Keep nav-map feed stream and cache latest rendered PNG frame."""
+        while True:
+            try:
+                client, _ = await self._async_get_client()
+                pyddlvector, _ = await self._async_get_modules()
+                if not hasattr(pyddlvector, "iter_nav_map_frames"):
+                    _LOGGER.debug(
+                        "pyddlvector does not provide iter_nav_map_frames; nav map camera disabled"
+                    )
+                    return
+
+                async for frame in pyddlvector.iter_nav_map_frames(
+                    client,
+                    frequency=_NAV_MAP_FEED_FREQUENCY_HZ,
+                    max_side=_NAV_MAP_MAX_SIDE_PIXELS,
+                    read_timeout=_CAMERA_STREAM_READ_TIMEOUT_SECONDS,
+                    reconnect_delay=_NAV_MAP_RECONNECT_DELAY_SECONDS,
+                    min_coverage_ratio=_NAV_MAP_MIN_COVERAGE_RATIO,
+                    robot_pose_provider=self._nav_map_robot_pose_provider,
+                ):
+                    frame_bytes = bytes(getattr(frame, "data", b""))
+                    if not frame_bytes:
+                        continue
+                    if frame_bytes == self.nav_map_frame:
+                        continue
+                    self.nav_map_frame = frame_bytes
+                    self.nav_map_frame_updated_monotonic = time.monotonic()
+                    self._nav_map_frame_event.set()
+                    self._async_notify_nav_map_listeners()
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:
+                if _is_unauthenticated_error(err):
+                    await self._async_handle_auth_failure("nav map stream", err)
+                    continue
+                details = str(err).strip()
+                if details:
+                    _LOGGER.debug("Vector nav map stream interrupted: %s", details)
+                else:
+                    _LOGGER.debug(
+                        "Vector nav map stream interrupted (%s)",
+                        err.__class__.__name__,
+                        exc_info=True,
+                    )
+                await asyncio.sleep(_NAV_MAP_RECONNECT_DELAY_SECONDS)
+                continue
+
+            await asyncio.sleep(_NAV_MAP_RECONNECT_DELAY_SECONDS)
 
     async def _async_camera_stream_loop(self) -> None:
         """Keep persistent camera feed stream and cache latest frame."""
