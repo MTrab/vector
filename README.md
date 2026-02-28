@@ -41,7 +41,14 @@ You can use either of these modes:
 
 ## Installation
 
-### Option 1: HACS via custom repository (recommended)
+### ~~Option 1: HACS (recommended)~~
+
+1. ~~Open HACS in Home Assistant.~~
+2. ~~Add this repository as a custom repository (category: Integration).~~
+3. ~~Install `Vector`.~~
+4. ~~Restart Home Assistant.~~
+
+### Option 2: HACS via custom repository
 
 1. Open HACS in Home Assistant.
 2. Go to the custom repositories section.
@@ -49,7 +56,7 @@ You can use either of these modes:
 4. Find and install `Vector` in HACS.
 5. Restart Home Assistant.
 
-### Option 2: Manual file copy
+### Option 3: Manual file copy
 
 1. Copy `custom_components/vector` into your Home Assistant `custom_components` directory.
 2. Restart Home Assistant.
