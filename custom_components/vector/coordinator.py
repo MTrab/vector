@@ -1278,12 +1278,25 @@ def _extract_camera_frame_bytes(pyddlvector: Any | None, response: Any) -> bytes
 
 
 def _is_unauthenticated_error(err: Exception) -> bool:
-    status_code = getattr(err, "status_code", None)
-    if status_code is not None and str(status_code).endswith("UNAUTHENTICATED"):
-        return True
+    current: BaseException | None = err
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
 
-    details = str(err).upper()
-    return "UNAUTHENTICATED" in details or "STATUS: 401" in details
+        if current.__class__.__name__ == "VectorAuthenticationError":
+            return True
+
+        status_code = getattr(current, "status_code", None)
+        if status_code is not None and str(status_code).endswith("UNAUTHENTICATED"):
+            return True
+
+        details = str(current).upper()
+        if "UNAUTHENTICATED" in details or "STATUS: 401" in details:
+            return True
+
+        current = current.__cause__ or current.__context__
+
+    return False
 
 
 def _resolve_provision_mode(

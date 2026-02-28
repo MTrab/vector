@@ -202,6 +202,24 @@ def test_is_unauthenticated_error_from_string() -> None:
     assert _is_unauthenticated_error(err) is True
 
 
+def test_is_unauthenticated_error_from_vector_auth_exception_name() -> None:
+    """pyddlvector auth-mapped exceptions should be recognized directly."""
+
+    class VectorAuthenticationError(Exception):
+        pass
+
+    err = VectorAuthenticationError("Authentication failed for robot RPC call")
+    assert _is_unauthenticated_error(err) is True
+
+
+def test_is_unauthenticated_error_from_nested_cause() -> None:
+    """Wrapped errors should still be recognized via exception cause chain."""
+    inner = RuntimeError("status = StatusCode.UNAUTHENTICATED")
+    outer = RuntimeError("request failed")
+    outer.__cause__ = inner
+    assert _is_unauthenticated_error(outer) is True
+
+
 def test_resolve_provision_mode_wirepod_by_default() -> None:
     """Without credentials, serial still produces wire-pod mode."""
     assert (
