@@ -37,8 +37,9 @@ _INITIAL_REFRESH_MAX_RETRY_DELAY_SECONDS = 60.0
 _CAMERA_STREAM_READ_TIMEOUT_SECONDS = 30.0
 _CAMERA_RECONNECT_DELAY_SECONDS = 2.0
 _NAV_MAP_WAIT_TIMEOUT_SECONDS = 1.0
-_NAV_MAP_RECONNECT_DELAY_SECONDS = 2.0
-_NAV_MAP_FEED_FREQUENCY_HZ = 5.0
+_NAV_MAP_RECONNECT_DELAY_SECONDS = 0.25
+_NAV_MAP_FEED_FREQUENCY_HZ = 10.0
+_NAV_MAP_MAX_SIDE_PIXELS = 128
 _NAV_MAP_MIN_COVERAGE_RATIO = 0.0
 _AUTH_BACKOFF_BASE_DELAY_SECONDS = 15.0
 _AUTH_BACKOFF_MAX_DELAY_SECONDS = 300.0
@@ -900,6 +901,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 async for frame in pyddlvector.iter_nav_map_frames(
                     client,
                     frequency=_NAV_MAP_FEED_FREQUENCY_HZ,
+                    max_side=_NAV_MAP_MAX_SIDE_PIXELS,
                     read_timeout=_CAMERA_STREAM_READ_TIMEOUT_SECONDS,
                     reconnect_delay=_NAV_MAP_RECONNECT_DELAY_SECONDS,
                     min_coverage_ratio=_NAV_MAP_MIN_COVERAGE_RATIO,
