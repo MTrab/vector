@@ -17,7 +17,6 @@ After setup, Home Assistant can expose data from Vector, including:
 - Eye color preset control (disabled by default)
 - Quick actions as buttons (sleep, go home, explore, listen for a beat, fetch cube)
 - Vision camera entity (disabled by default)
-- Nav map camera entity (disabled by default)
 - Home Assistant actions/services:
   - `vector.say_text`
   - `vector.set_eye_color`
@@ -78,7 +77,7 @@ To enable them:
 
 1. Open your Vector device in Home Assistant.
 2. Open the entity list.
-3. Enable entities like `Vision`, `Nav map`, `Volume`, `Stimulation`, and diagnostic sensors as needed.
+3. Enable entities like `Vision`, `Volume`, `Stimulation`, and diagnostic sensors as needed.
 
 ## Actions for Automations
 
