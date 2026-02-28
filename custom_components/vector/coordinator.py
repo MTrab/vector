@@ -837,7 +837,7 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
     async def async_get_latest_nav_map_frame(
         self,
         *,
-        wait_timeout: float = _NAV_MAP_WAIT_TIMEOUT_SECONDS,
+        wait_timeout: float | None = _NAV_MAP_WAIT_TIMEOUT_SECONDS,
     ) -> bytes | None:
         """Return latest nav map PNG frame, optionally waiting for first frame."""
         await self.async_start_nav_map_stream()
@@ -846,9 +846,12 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             return self.nav_map_frame
 
         try:
-            await asyncio.wait_for(
-                self._nav_map_frame_event.wait(), timeout=wait_timeout
-            )
+            if wait_timeout is None:
+                await self._nav_map_frame_event.wait()
+            else:
+                await asyncio.wait_for(
+                    self._nav_map_frame_event.wait(), timeout=wait_timeout
+                )
         except TimeoutError:
             return None
 

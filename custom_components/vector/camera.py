@@ -78,6 +78,7 @@ class VectorNavMapCamera(VectorEntity, Camera):
         Camera.__init__(self)
         VectorEntity.__init__(self, coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_nav_map"
+        self.content_type = "image/png"
 
     async def async_camera_image(
         self,
@@ -87,4 +88,4 @@ class VectorNavMapCamera(VectorEntity, Camera):
         """Return latest nav map PNG frame bytes."""
         del width, height
 
-        return await self.coordinator.async_get_latest_nav_map_frame(wait_timeout=1.0)
+        return await self.coordinator.async_get_latest_nav_map_frame(wait_timeout=None)
