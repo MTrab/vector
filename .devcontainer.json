@@ -44,6 +44,7 @@
 	},
 	"mounts": [
 		"source=${localEnv:HOME}/.codex/auth.json,target=/etc/codex/auth.json,readonly,type=bind",
-		"source=${localWorkspaceFolder}/../pyddlvector,target=/development/github/homeassistant/pyddlvector,type=bind"
+		"source=${localWorkspaceFolder}/../pyddlvector,target=/development/github/homeassistant/pyddlvector,type=bind",
+		"source=gh-config,target=/home/vscode/.config/gh,type=volume"
 	]
 }
