@@ -8,7 +8,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import EYE_COLOR_PRESET_OPTIONS, MASTER_VOLUME_OPTIONS
+from .const import (
+    EYE_COLOR_CUSTOM_OPTION,
+    EYE_COLOR_PRESET_OPTIONS,
+    MASTER_VOLUME_OPTIONS,
+)
 from .coordinator import VectorCoordinator
 from .entity import VectorEntity
 
@@ -64,13 +68,19 @@ class VectorEyeColorPresetSelect(VectorEntity, SelectEntity):
         """Initialize eye color preset select."""
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_eye_color_preset"
-        self._attr_options = list(EYE_COLOR_PRESET_OPTIONS)
+        self._attr_options = [*EYE_COLOR_PRESET_OPTIONS, EYE_COLOR_CUSTOM_OPTION]
 
     @property
     def current_option(self) -> str | None:
         """Return current eye color preset option."""
+        if self.coordinator.eye_color_custom_enabled:
+            return EYE_COLOR_CUSTOM_OPTION
         return self.coordinator.eye_color_preset
 
     async def async_select_option(self, option: str) -> None:
         """Set a new eye color preset option."""
+        if option == EYE_COLOR_CUSTOM_OPTION:
+            raise ValueError(
+                "Custom eye color must be set via the set_eye_color action/service."
+            )
         await self.coordinator.async_set_eye_color_preset(option)

@@ -5,7 +5,13 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from custom_components.vector.const import CONF_HOST, CONF_ROBOT_NAME
+import pytest
+
+from custom_components.vector.const import (
+    CONF_HOST,
+    CONF_ROBOT_NAME,
+    EYE_COLOR_CUSTOM_OPTION,
+)
 from custom_components.vector.select import (
     VectorEyeColorPresetSelect,
     VectorMasterVolumeSelect,
@@ -18,6 +24,7 @@ class FakeCoordinator:
     def __init__(self, master_volume: str | None = None) -> None:
         self.master_volume = master_volume
         self.eye_color_preset: str | None = None
+        self.eye_color_custom_enabled = False
         self.calls: list[str] = []
         self.eye_calls: list[str] = []
 
@@ -65,7 +72,18 @@ def test_eye_color_select_maps_current_option_and_is_disabled_by_default() -> No
     entity = VectorEyeColorPresetSelect(coordinator, entry)
 
     assert entity.current_option == "purple"
+    assert entity.options[-1] == EYE_COLOR_CUSTOM_OPTION
     assert entity.entity_registry_enabled_default is False
+
+
+def test_eye_color_select_maps_custom_state_when_custom_enabled() -> None:
+    coordinator = FakeCoordinator(master_volume="medium_low")
+    coordinator.eye_color_preset = "purple"
+    coordinator.eye_color_custom_enabled = True
+    entry = _entry({CONF_ROBOT_NAME: "Vector-ABCD", CONF_HOST: "192.168.1.10"})
+    entity = VectorEyeColorPresetSelect(coordinator, entry)
+
+    assert entity.current_option == EYE_COLOR_CUSTOM_OPTION
 
 
 def test_eye_color_select_sets_option_via_coordinator() -> None:
@@ -77,3 +95,12 @@ def test_eye_color_select_sets_option_via_coordinator() -> None:
 
     assert coordinator.eye_calls == ["azure_blue"]
     assert coordinator.eye_color_preset == "azure_blue"
+
+
+def test_eye_color_select_rejects_direct_custom_selection() -> None:
+    coordinator = FakeCoordinator(master_volume="low")
+    entry = _entry({CONF_ROBOT_NAME: "Vector-ABCD", CONF_HOST: "192.168.1.10"})
+    entity = VectorEyeColorPresetSelect(coordinator, entry)
+
+    with pytest.raises(ValueError):
+        asyncio.run(entity.async_select_option(EYE_COLOR_CUSTOM_OPTION))

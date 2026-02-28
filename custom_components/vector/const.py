@@ -8,7 +8,6 @@ DOMAIN = "vector"
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
     Platform.SELECT,
-    Platform.NUMBER,
     Platform.BUTTON,
     Platform.CAMERA,
 ]
@@ -56,12 +55,15 @@ EYE_COLOR_PRESET_OPTIONS: tuple[str, ...] = (
     "purple",
     "other_green",
 )
+EYE_COLOR_CUSTOM_OPTION = "custom"
 
 SERVICE_SAY_TEXT = "say_text"
+SERVICE_SET_EYE_COLOR = "set_eye_color"
 ATTR_ENTRY_ID = "entry_id"
 ATTR_TEXT = "text"
 ATTR_USE_VECTOR_VOICE = "use_vector_voice"
 ATTR_DURATION_SCALAR = "duration_scalar"
 ATTR_PITCH_SCALAR = "pitch_scalar"
+ATTR_RGB_COLOR = "rgb_color"
 
 SAY_TEXT_FIELD_ENTITY_ID = ATTR_ENTITY_ID

@@ -43,16 +43,9 @@
           "lime_green": "Lime Green",
           "azure_blue": "Azure Blue",
           "purple": "Purple",
-          "other_green": "Other Green"
+          "other_green": "Other Green",
+          "custom": "Custom ..."
         }
-      }
-    },
-    "number": {
-      "custom_eye_color_hue": {
-        "name": "Custom eye color hue"
-      },
-      "custom_eye_color_saturation": {
-        "name": "Custom eye color saturation"
       }
     },
     "sensor": {
@@ -203,6 +196,20 @@
         "pitch_scalar": {
           "name": "Pitch scalar",
           "description": "Voice pitch scalar from 0.0 (normal) to 1.0 (high)."
+        }
+      }
+    },
+    "set_eye_color": {
+      "name": "Set eye color",
+      "description": "Set custom eye color for Vector using RGB values.",
+      "fields": {
+        "rgb_color": {
+          "name": "RGB color",
+          "description": "Target eye color as red, green, blue values."
+        },
+        "device_id": {
+          "name": "Vector Robot",
+          "description": "Target Vector device. Required when multiple Vector devices are configured."
         }
       }
     }
