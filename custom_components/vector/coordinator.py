@@ -541,16 +541,19 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         if normalized not in MASTER_VOLUME_OPTIONS:
             raise ValueError(f"Unsupported master volume option: {value}")
 
-        async with self._settings_lock:
-            client, _ = await self._async_get_client()
-            pyddlvector, _ = await self._async_get_modules()
-            selected = await pyddlvector.update_master_volume(
-                client,
-                normalized,
-                timeout=_DEFAULT_TIMEOUT_SECONDS,
-            )
-            self.master_volume = str(selected).strip().lower()
-            self.async_set_updated_data(None)
+        async def _apply() -> None:
+            async with self._settings_lock:
+                client, _ = await self._async_get_client()
+                pyddlvector, _ = await self._async_get_modules()
+                selected = await pyddlvector.update_master_volume(
+                    client,
+                    normalized,
+                    timeout=_DEFAULT_TIMEOUT_SECONDS,
+                )
+                self.master_volume = str(selected).strip().lower()
+                self.async_set_updated_data(None)
+
+        await self._async_execute_with_auth_retry("set master volume", _apply)
 
     async def async_say_text(
         self,
@@ -570,41 +573,44 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         if not (-1.0 <= pitch_scalar <= 1.0):
             raise ValueError("pitch_scalar must be between -1.0 and 1.0")
 
-        client, messaging = await self._async_get_client()
-        request_kwargs: dict[str, Any] = {
-            "text": normalized_text,
-            "use_vector_voice": bool(use_vector_voice),
-            "duration_scalar": float(duration_scalar),
-        }
-        if pitch_scalar != 0.0:
-            request_kwargs["pitch_scalar"] = float(pitch_scalar)
-        request = messaging.protocol.SayTextRequest(**request_kwargs)
+        async def _apply() -> None:
+            client, messaging = await self._async_get_client()
+            request_kwargs: dict[str, Any] = {
+                "text": normalized_text,
+                "use_vector_voice": bool(use_vector_voice),
+                "duration_scalar": float(duration_scalar),
+            }
+            if pitch_scalar != 0.0:
+                request_kwargs["pitch_scalar"] = float(pitch_scalar)
+            request = messaging.protocol.SayTextRequest(**request_kwargs)
 
-        if hasattr(client.stub, "BehaviorControl"):
-            try:
-                await self._async_say_text_with_behavior_control(
-                    client,
-                    messaging,
-                    request,
-                    priority=messaging.protocol.ControlRequest.DEFAULT,
-                )
-            except ValueError as err:
-                if (
-                    "did not grant behavior control" not in str(err).lower()
-                    or not await self._async_wait_until_awake_for_say_text(
-                        timeout=_SAY_TEXT_WAKE_WAIT_TIMEOUT_SECONDS
+            if hasattr(client.stub, "BehaviorControl"):
+                try:
+                    await self._async_say_text_with_behavior_control(
+                        client,
+                        messaging,
+                        request,
+                        priority=messaging.protocol.ControlRequest.DEFAULT,
                     )
-                ):
-                    raise
-                await self._async_say_text_with_behavior_control(
-                    client,
-                    messaging,
-                    request,
-                    priority=messaging.protocol.ControlRequest.DEFAULT,
-                )
-            return
+                except ValueError as err:
+                    if (
+                        "did not grant behavior control" not in str(err).lower()
+                        or not await self._async_wait_until_awake_for_say_text(
+                            timeout=_SAY_TEXT_WAKE_WAIT_TIMEOUT_SECONDS
+                        )
+                    ):
+                        raise
+                    await self._async_say_text_with_behavior_control(
+                        client,
+                        messaging,
+                        request,
+                        priority=messaging.protocol.ControlRequest.DEFAULT,
+                    )
+                return
 
-        await client.rpc("SayText", request, timeout=_DEFAULT_TIMEOUT_SECONDS)
+            await client.rpc("SayText", request, timeout=_DEFAULT_TIMEOUT_SECONDS)
+
+        await self._async_execute_with_auth_retry("say text", _apply)
 
     async def _async_wait_until_awake_for_say_text(self, *, timeout: float) -> bool:
         """Wait until robot is no longer in sleeping activity state."""
@@ -695,23 +701,26 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         if intent is None:
             raise ValueError(f"Unsupported quick action: {action_key}")
 
-        client, messaging = await self._async_get_client()
-        request = messaging.protocol.AppIntentRequest(intent=intent)
-        if hasattr(client.stub, "AppIntent"):
-            await client.rpc(
-                "AppIntent",
+        async def _apply() -> None:
+            client, messaging = await self._async_get_client()
+            request = messaging.protocol.AppIntentRequest(intent=intent)
+            if hasattr(client.stub, "AppIntent"):
+                await client.rpc(
+                    "AppIntent",
+                    request,
+                    timeout=_DEFAULT_TIMEOUT_SECONDS,
+                )
+                return
+
+            await client.unary_unary(
+                _APP_INTENT_RPC_PATH,
                 request,
+                request_serializer=messaging.protocol.AppIntentRequest.SerializeToString,
+                response_deserializer=messaging.protocol.AppIntentResponse.FromString,
                 timeout=_DEFAULT_TIMEOUT_SECONDS,
             )
-            return
 
-        await client.unary_unary(
-            _APP_INTENT_RPC_PATH,
-            request,
-            request_serializer=messaging.protocol.AppIntentRequest.SerializeToString,
-            response_deserializer=messaging.protocol.AppIntentResponse.FromString,
-            timeout=_DEFAULT_TIMEOUT_SECONDS,
-        )
+        await self._async_execute_with_auth_retry("quick action", _apply)
 
     async def async_set_eye_color_preset(self, value: str) -> None:
         """Update robot eye color preset and push state update."""
@@ -719,17 +728,20 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         if normalized not in EYE_COLOR_PRESET_OPTIONS:
             raise ValueError(f"Unsupported eye color preset: {value}")
 
-        async with self._settings_lock:
-            client, _ = await self._async_get_client()
-            pyddlvector, _ = await self._async_get_modules()
-            selected = await pyddlvector.update_eye_color_preset(
-                client,
-                normalized,
-                timeout=_DEFAULT_TIMEOUT_SECONDS,
-            )
-            self.eye_color_preset = str(selected).strip().lower()
-            self.eye_color_custom_enabled = False
-            self.async_set_updated_data(None)
+        async def _apply() -> None:
+            async with self._settings_lock:
+                client, _ = await self._async_get_client()
+                pyddlvector, _ = await self._async_get_modules()
+                selected = await pyddlvector.update_eye_color_preset(
+                    client,
+                    normalized,
+                    timeout=_DEFAULT_TIMEOUT_SECONDS,
+                )
+                self.eye_color_preset = str(selected).strip().lower()
+                self.eye_color_custom_enabled = False
+                self.async_set_updated_data(None)
+
+        await self._async_execute_with_auth_retry("set eye color preset", _apply)
 
     async def async_set_custom_eye_color(
         self,
@@ -738,21 +750,24 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         saturation: float,
     ) -> None:
         """Update robot custom eye color and push state update."""
-        async with self._settings_lock:
-            client, _ = await self._async_get_client()
-            pyddlvector, _ = await self._async_get_modules()
-            normalized_hue, normalized_saturation = (
-                await pyddlvector.update_custom_eye_color(
-                    client,
-                    hue=float(hue),
-                    saturation=float(saturation),
-                    timeout=_DEFAULT_TIMEOUT_SECONDS,
+        async def _apply() -> None:
+            async with self._settings_lock:
+                client, _ = await self._async_get_client()
+                pyddlvector, _ = await self._async_get_modules()
+                normalized_hue, normalized_saturation = (
+                    await pyddlvector.update_custom_eye_color(
+                        client,
+                        hue=float(hue),
+                        saturation=float(saturation),
+                        timeout=_DEFAULT_TIMEOUT_SECONDS,
+                    )
                 )
-            )
-            self.eye_color_custom_enabled = True
-            self.eye_color_custom_hue = float(normalized_hue)
-            self.eye_color_custom_saturation = float(normalized_saturation)
-            self.async_set_updated_data(None)
+                self.eye_color_custom_enabled = True
+                self.eye_color_custom_hue = float(normalized_hue)
+                self.eye_color_custom_saturation = float(normalized_saturation)
+                self.async_set_updated_data(None)
+
+        await self._async_execute_with_auth_retry("set custom eye color", _apply)
 
     async def async_start_camera_stream(self) -> None:
         """Ensure persistent camera stream task is running."""
@@ -968,22 +983,47 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         ) = next_snapshot
         return True
 
-    async def _async_handle_auth_failure(self, source: str, err: Exception) -> None:
-        async with self._auth_backoff_lock:
-            delay = self._auth_backoff_delay_seconds
-            self._auth_backoff_delay_seconds = min(
-                self._auth_backoff_delay_seconds * 2,
-                _AUTH_BACKOFF_MAX_DELAY_SECONDS,
-            )
+    async def _async_execute_with_auth_retry(self, source: str, operation) -> Any:
+        """Execute one operation, retrying once after auth reset on 401/UNAUTHENTICATED."""
+        try:
+            return await operation()
+        except Exception as err:
+            if not _is_unauthenticated_error(err):
+                raise
+            await self._async_handle_auth_failure(source, err, apply_backoff=False)
+            return await operation()
 
-        _LOGGER.warning(
-            "Vector %s authentication failed; backing off for %.0fs: %s",
-            source,
-            delay,
-            err,
-        )
+    async def _async_handle_auth_failure(
+        self,
+        source: str,
+        err: Exception,
+        *,
+        apply_backoff: bool = True,
+    ) -> None:
+        delay = 0.0
+        if apply_backoff:
+            async with self._auth_backoff_lock:
+                delay = self._auth_backoff_delay_seconds
+                self._auth_backoff_delay_seconds = min(
+                    self._auth_backoff_delay_seconds * 2,
+                    _AUTH_BACKOFF_MAX_DELAY_SECONDS,
+                )
+
+            _LOGGER.warning(
+                "Vector %s authentication failed; backing off for %.0fs: %s",
+                source,
+                delay,
+                err,
+            )
+        else:
+            _LOGGER.warning(
+                "Vector %s authentication failed; resetting client and retrying once: %s",
+                source,
+                err,
+            )
         await self._async_reset_client(clear_robot_config=True)
-        await asyncio.sleep(delay)
+        if delay > 0:
+            await asyncio.sleep(delay)
 
     async def _async_reset_client(self, *, clear_robot_config: bool) -> None:
         client = self._client

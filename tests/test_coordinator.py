@@ -315,6 +315,67 @@ def test_trigger_quick_action_falls_back_to_unary_path_when_stub_lacks_rpc() -> 
     ]
 
 
+def test_trigger_quick_action_retries_once_on_unauthenticated_error() -> None:
+    import asyncio
+
+    coordinator = object.__new__(VectorCoordinator)
+
+    class FakeStub:
+        pass
+
+    class FakeAuthError(Exception):
+        def __init__(self) -> None:
+            super().__init__("UNAUTHENTICATED")
+            self.status_code = "StatusCode.UNAUTHENTICATED"
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.stub = FakeStub()
+            self.unary_calls = 0
+
+        async def unary_unary(self, path: str, request, **kwargs):  # type: ignore[no-untyped-def]
+            del kwargs
+            assert path == "/Anki.Vector.external_interface.ExternalInterface/AppIntent"
+            assert request.intent == "intent_system_sleep"
+            self.unary_calls += 1
+            if self.unary_calls == 1:
+                raise FakeAuthError()
+            return object()
+
+    class FakeProtocol:
+        class AppIntentRequest:
+            def __init__(self, *, intent: str) -> None:
+                self.intent = intent
+
+            @staticmethod
+            def SerializeToString(_request):  # type: ignore[no-untyped-def]
+                return b""
+
+        class AppIntentResponse:
+            @staticmethod
+            def FromString(_payload: bytes):  # type: ignore[no-untyped-def]
+                return object()
+
+    client = FakeClient()
+    messaging = SimpleNamespace(protocol=FakeProtocol)
+    auth_failures: list[str] = []
+
+    async def _fake_get_client():
+        return client, messaging
+
+    async def _fake_auth_failure(source: str, err: Exception, **_kwargs):  # type: ignore[no-untyped-def]
+        assert _is_unauthenticated_error(err)
+        auth_failures.append(source)
+
+    coordinator._async_get_client = _fake_get_client  # type: ignore[attr-defined]
+    coordinator._async_handle_auth_failure = _fake_auth_failure  # type: ignore[attr-defined]
+
+    asyncio.run(coordinator.async_trigger_quick_action("sleep"))
+
+    assert client.unary_calls == 2
+    assert auth_failures == ["quick action"]
+
+
 def test_say_text_uses_behavior_control_before_sending_request() -> None:
     import asyncio
 
