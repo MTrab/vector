@@ -3,6 +3,9 @@
     "camera": {
       "vision": {
         "name": "Vision"
+      },
+      "nav_map": {
+        "name": "Nav map"
       }
     },
     "button": {
