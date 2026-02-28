@@ -15,7 +15,7 @@ After setup, Home Assistant can expose data from Vector, including:
 - Stimulation data (disabled by default)
 - Master volume control (disabled by default)
 - Eye color preset control (disabled by default)
-- Quick actions as buttons (sleep, go home, explore, dance, fetch cube)
+- Quick actions as buttons (sleep, go home, explore, listen for a beat, fetch cube)
 - Vision camera entity (disabled by default)
 - Home Assistant actions/services:
   - `vector.say_text`
