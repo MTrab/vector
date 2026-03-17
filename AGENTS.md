@@ -51,7 +51,7 @@ If the repository becomes a monorepo, additional `AGENTS.md` files may exist in 
 
 The Python communication module source code is maintained in:
 
-- `/development/github/homeassistant/pyddlvector`
+- `/workspaces/pyddlvector`
 
 From this workspace, the agent has access to work in that repository as well, including creating branches, making edits, committing, and pushing.
 
