@@ -43,8 +43,9 @@
 		"ghcr.io/devcontainers/features/rust:1": {}
 	},
 	"mounts": [
+		"source=${localWorkspaceFolder}/config,target=/config,type=bind,consistency=cached",
 		"source=${localEnv:HOME}/.codex/auth.json,target=/etc/codex/auth.json,readonly,type=bind",
-		"source=${localWorkspaceFolder}/../pyddlvector,target=/development/github/homeassistant/pyddlvector,type=bind",
+		"source=${localWorkspaceFolder}/../pyddlvector,target=/workspaces/pyddlvector,type=bind",
 		"source=gh-config,target=/home/vscode/.config/gh,type=volume"
 	]
 }
