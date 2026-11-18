@@ -64,28 +64,42 @@ def test_event_stream_publishes_and_throttles_sightings() -> None:
         )
 
     async def run() -> None:
-        stream = Mock()
-        stream.read = AsyncMock(
-            side_effect=[
-                observed_face(" ", -1),
-                observed_face(" Alex ", 1),
-                observed_object(charger_type, 1),
-                event_response(
-                    "object_event",
-                    object_event=SimpleNamespace(WhichOneof=lambda _: "object_tapped"),
+        observations = iter(
+            [
+                (0, observed_face(" ", -1)),
+                (0, observed_face(" Alex ", 1)),
+                (0, observed_object(charger_type, 1)),
+                (
+                    0,
+                    event_response(
+                        "object_event",
+                        object_event=SimpleNamespace(
+                            WhichOneof=lambda _: "object_tapped"
+                        ),
+                    ),
                 ),
-                observed_object(light_cube_type, 1),
-                observed_face("Alex", 1),
-                observed_object(light_cube_type, 1),
-                observed_face("Sam", 2),
-                observed_object(light_cube_type, 2),
-                observed_face("Alex", 1),
-                observed_object(light_cube_type, 1),
-                observed_face("Alex", 1),
-                observed_object(light_cube_type, 1),
-                asyncio.CancelledError,
+                (0, observed_object(light_cube_type, 1)),
+                (1, observed_face("Alex", 1)),
+                (1, observed_object(light_cube_type, 1)),
+                (1, observed_face("Sam", 2)),
+                (1, observed_object(light_cube_type, 2)),
+                (59, observed_face("Alex", 1)),
+                (59, observed_object(light_cube_type, 1)),
+                (60, observed_face("Alex", 1)),
+                (60, observed_object(light_cube_type, 1)),
             ]
         )
+        now = 0
+
+        async def read():
+            nonlocal now
+            observation = next(observations, None)
+            if observation is None:
+                raise asyncio.CancelledError
+            now, response = observation
+            return response
+
+        stream = Mock(read=read)
         hass = Mock()
         hass.async_create_background_task.side_effect = asyncio.create_task
         entry = SimpleNamespace(entry_id="vector-entry")
@@ -105,9 +119,7 @@ def test_event_stream_publishes_and_throttles_sightings() -> None:
             patch.object(
                 coordinator,
                 "time",
-                SimpleNamespace(
-                    monotonic=Mock(side_effect=[100] * 6 + [159, 159, 160, 160])
-                ),
+                SimpleNamespace(monotonic=lambda: now),
             ),
             pytest.raises(asyncio.CancelledError),
         ):
