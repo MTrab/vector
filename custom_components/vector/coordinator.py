@@ -30,6 +30,7 @@ _DEFAULT_TIMEOUT_SECONDS = 10.0
 _MAX_EVENT_READS = 10
 _STREAM_READ_TIMEOUT_SECONDS = 120.0
 _STREAM_RECONNECT_DELAY_SECONDS = 3.0
+_SIGHTING_INTERVAL_SECONDS = 60
 _INITIAL_REFRESH_TIMEOUT_SECONDS = 20.0
 _INITIAL_REFRESH_RETRY_ATTEMPTS = 5
 _INITIAL_REFRESH_RETRY_DELAY_SECONDS = 3.0
@@ -110,6 +111,8 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self._activity_tracker: Any | None = None
         self._telemetry_filter: Any | None = None
         self._event_listener_task: asyncio.Task[None] | None = None
+        self._face_seen_last: dict[str, float] = {}
+        self._cube_seen_last: dict[int, float] = {}
         self._camera_stream_task: asyncio.Task[None] | None = None
         self._nav_map_stream_task: asyncio.Task[None] | None = None
         self._wake_enable_stream_task: asyncio.Task[None] | None = None
@@ -377,6 +380,43 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
 
         return STATE_UNKNOWN
 
+    def _fire_face_seen(self, face: Any) -> None:
+        """Publish a named face observation at most once per minute."""
+        name = face.name.strip()
+        if not name:
+            return
+
+        now = time.monotonic()
+        last_seen = self._face_seen_last.get(name)
+        if last_seen is not None and now - last_seen < _SIGHTING_INTERVAL_SECONDS:
+            return
+
+        self._face_seen_last[name] = now
+        self.hass.bus.async_fire(
+            "vector_face_seen",
+            {"name": name, "face_id": face.face_id, "entry_id": self.entry.entry_id},
+        )
+
+    def _fire_cube_seen(self, object_event: Any, light_cube_type: int) -> None:
+        """Publish a Light Cube observation at most once per minute."""
+        if object_event.WhichOneof("object_event_type") != "robot_observed_object":
+            return
+        observed_object = object_event.robot_observed_object
+        if observed_object.object_type != light_cube_type:
+            return
+
+        object_id = observed_object.object_id
+        now = time.monotonic()
+        last_seen = self._cube_seen_last.get(object_id)
+        if last_seen is not None and now - last_seen < _SIGHTING_INTERVAL_SECONDS:
+            return
+
+        self._cube_seen_last[object_id] = now
+        self.hass.bus.async_fire(
+            "vector_cube_seen",
+            {"object_id": object_id, "entry_id": self.entry.entry_id},
+        )
+
     async def _async_event_listener_loop(self) -> None:
         """Keep a persistent event stream open and push updates to entities."""
         while True:
@@ -462,6 +502,14 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                         has_changes = self._update_stimulation_from_event(
                             event_response.event.stimulation_info
                         )
+                    elif event_type == "robot_observed_face":
+                        self._fire_face_seen(event.robot_observed_face)
+                        continue
+                    elif event_type == "object_event":
+                        self._fire_cube_seen(
+                            event.object_event, messaging.protocol.BLOCK_LIGHTCUBE1
+                        )
+                        continue
                     else:
                         continue
 
