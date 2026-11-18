@@ -85,7 +85,7 @@ class FakeCoordinator:
 
 def _entry(data: dict[str, str], entry_id: str = "entry-1") -> SimpleNamespace:
     """Create a config entry stub."""
-    return SimpleNamespace(data=data, entry_id=entry_id)
+    return SimpleNamespace(data=data, options={}, entry_id=entry_id)
 
 
 def test_current_activity_sensor_native_value() -> None:
