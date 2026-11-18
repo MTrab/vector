@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 from custom_components.vector import coordinator
 from custom_components.vector.coordinator import (
@@ -37,7 +37,8 @@ def test_telemetry_refresh_keeps_newer_push_charging_state() -> None:
     """Keep charging changes received during a poll."""
 
     async def run() -> None:
-        vector = VectorCoordinator(Mock(), SimpleNamespace(entry_id="vector-entry"))
+        with patch("homeassistant.helpers.frame.report_usage"):
+            vector = VectorCoordinator(Mock(), SimpleNamespace(entry_id="vector-entry"))
         battery_started = asyncio.Event()
         finish_battery = asyncio.Event()
         vector._async_get_client = AsyncMock(return_value=(object(), object()))
@@ -93,7 +94,8 @@ def test_telemetry_poll_runs_independently_and_stops_on_shutdown(monkeypatch) ->
         hass = Mock()
         hass.async_create_background_task.side_effect = asyncio.create_task
         entry = SimpleNamespace(entry_id="vector-entry", pref_disable_polling=False)
-        vector = VectorCoordinator(hass, entry)
+        with patch("homeassistant.helpers.frame.report_usage"):
+            vector = VectorCoordinator(hass, entry)
         vector.battery_percent = 50
         vector.firmware_version = "firmware"
         vector.async_refresh = AsyncMock()
