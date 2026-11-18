@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
+from custom_components.vector import coordinator
 from custom_components.vector.coordinator import (
     VectorCoordinator,
     _battery_percentage_from_wirepod_curve,
     _derive_activity_from_robot_state,
-    _extract_robot_telemetry_snapshot,
     _extract_camera_frame_bytes,
+    _extract_robot_telemetry_snapshot,
     _is_unauthenticated_error,
     _normalize_activity_state,
     _normalize_battery_level_name,
@@ -28,6 +31,108 @@ def _state(**kwargs):
     }
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
+
+
+def test_telemetry_refresh_keeps_newer_push_charging_state() -> None:
+    """Keep charging changes received during a poll."""
+
+    async def run() -> None:
+        vector = VectorCoordinator(Mock(), SimpleNamespace(entry_id="vector-entry"))
+        battery_started = asyncio.Event()
+        finish_battery = asyncio.Event()
+        vector._async_get_client = AsyncMock(return_value=(object(), object()))
+
+        async def read_battery(*_args):
+            battery_started.set()
+            await finish_battery.wait()
+            return 4.10, "nominal", False
+
+        first_stats = SimpleNamespace(
+            days_alive=1,
+            reacted_to_trigger_word=2,
+            utility_features_used=3,
+            seconds_petted=4,
+            distance_moved_cm=5,
+        )
+        vector._async_read_lifetime_stats = AsyncMock(
+            side_effect=[
+                first_stats,
+                SimpleNamespace(**(vars(first_stats) | {"days_alive": 2})),
+            ]
+        )
+        vector._async_read_firmware_version = AsyncMock(return_value="firmware")
+        vector._async_read_master_volume = AsyncMock(return_value="medium")
+        vector._async_read_eye_color = AsyncMock(return_value=None)
+        vector._async_read_battery_state = AsyncMock(return_value=(3.70, "low", False))
+        await vector._async_update_data()
+        assert vector.battery_volts == 3.70
+        assert vector.days_alive == 1
+
+        vector._async_read_battery_state.side_effect = read_battery
+        refresh = asyncio.create_task(vector._async_update_data())
+        await battery_started.wait()
+        vector._latest_robot_state = object()
+        vector.is_charging = True
+        finish_battery.set()
+        await refresh
+
+        assert vector.battery_percent == 100
+        assert vector.is_charging is True
+        assert vector.days_alive == 2
+        vector._async_read_firmware_version.assert_awaited_once()
+        vector._async_read_master_volume.assert_awaited_once()
+        vector._async_read_eye_color.assert_awaited_once()
+
+    asyncio.run(run())
+
+
+def test_telemetry_poll_runs_independently_and_stops_on_shutdown(monkeypatch) -> None:
+    """Polling runs alongside push updates and is cancelled on unload."""
+
+    async def run() -> None:
+        hass = Mock()
+        hass.async_create_background_task.side_effect = asyncio.create_task
+        entry = SimpleNamespace(entry_id="vector-entry", pref_disable_polling=False)
+        vector = VectorCoordinator(hass, entry)
+        vector.battery_percent = 50
+        vector.firmware_version = "firmware"
+        vector.async_refresh = AsyncMock()
+        vector.async_start_event_listener = AsyncMock()
+        tick = asyncio.Semaphore(0)
+        timer_started = asyncio.Event()
+
+        async def sleep(delay):
+            assert delay == 300
+            timer_started.set()
+            await tick.acquire()
+
+        monkeypatch.setattr(
+            coordinator,
+            "asyncio",
+            SimpleNamespace(
+                sleep=sleep,
+                wait_for=asyncio.wait_for,
+                CancelledError=asyncio.CancelledError,
+            ),
+        )
+        await vector.async_start_runtime()
+        task = vector._telemetry_poll_task
+        await timer_started.wait()
+        vector.async_set_updated_data(None)
+        tick.release()
+        await asyncio.sleep(0)
+        assert vector.async_refresh.await_count == 2
+
+        entry.pref_disable_polling = True
+        tick.release()
+        await asyncio.sleep(0)
+        assert vector.async_refresh.await_count == 2
+
+        await vector.async_shutdown()
+        assert task.cancelled()
+        assert vector._telemetry_poll_task is None
+
+    asyncio.run(run())
 
 
 def test_derive_activity_sleeping_from_calm_power_mode() -> None:
