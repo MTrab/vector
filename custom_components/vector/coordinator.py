@@ -30,6 +30,7 @@ _DEFAULT_TIMEOUT_SECONDS = 10.0
 _MAX_EVENT_READS = 10
 _STREAM_READ_TIMEOUT_SECONDS = 120.0
 _STREAM_RECONNECT_DELAY_SECONDS = 3.0
+_TELEMETRY_POLL_INTERVAL_SECONDS = 300
 _SIGHTING_INTERVAL_SECONDS = 60
 _INITIAL_REFRESH_TIMEOUT_SECONDS = 20.0
 _INITIAL_REFRESH_RETRY_ATTEMPTS = 5
@@ -111,6 +112,8 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self._activity_tracker: Any | None = None
         self._telemetry_filter: Any | None = None
         self._event_listener_task: asyncio.Task[None] | None = None
+        self._telemetry_poll_task: asyncio.Task[None] | None = None
+        self._initial_refresh_complete = False
         self._face_seen_last: dict[str, float] = {}
         self._cube_seen_last: dict[int, float] = {}
         self._camera_stream_task: asyncio.Task[None] | None = None
@@ -128,9 +131,10 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
         self._auth_backoff_lock = asyncio.Lock()
 
     async def _async_update_data(self) -> None:
-        """Do initial one-shot load at setup."""
+        """Refresh battery and lifetime stats, and load settings at startup."""
         try:
             client, messaging = await self._async_get_client()
+            previous_robot_state = self._latest_robot_state
             (
                 battery_volts,
                 battery_level,
@@ -139,28 +143,34 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 client,
                 messaging,
             )
-            firmware_version = await self._async_read_firmware_version(
-                client, messaging
-            )
             lifetime_stats = await self._async_read_lifetime_stats()
-            master_volume = await self._async_read_master_volume()
-            eye_color = await self._async_read_eye_color()
-            activity = self.current_activity
+            if not self._initial_refresh_complete:
+                await self._async_load_initial_settings(client, messaging)
         except Exception as err:
-            raise UpdateFailed(f"Failed to update Vector activity: {err}") from err
+            raise UpdateFailed(
+                "Failed to refresh Vector battery and lifetime stats"
+            ) from err
 
         self.battery_percent = _battery_percentage_from_wirepod_curve(battery_volts)
         self.battery_volts = battery_volts
         self.battery_level = battery_level
-        self.is_charging = is_charging
-        self.firmware_version = firmware_version
+        if self._latest_robot_state is previous_robot_state:
+            self.is_charging = is_charging
         if lifetime_stats is not None:
             self.days_alive = lifetime_stats.days_alive
             self.reacted_to_trigger_word = lifetime_stats.reacted_to_trigger_word
             self.utility_features_used = lifetime_stats.utility_features_used
             self.seconds_petted = lifetime_stats.seconds_petted
             self.distance_moved_cm = lifetime_stats.distance_moved_cm
-        self.master_volume = master_volume
+        self._auth_backoff_delay_seconds = _AUTH_BACKOFF_BASE_DELAY_SECONDS
+
+    async def _async_load_initial_settings(self, client: Any, messaging: Any) -> None:
+        """Read firmware and settings during the first successful refresh."""
+        self.firmware_version = await self._async_read_firmware_version(
+            client, messaging
+        )
+        self.master_volume = await self._async_read_master_volume()
+        eye_color = await self._async_read_eye_color()
         if eye_color is not None:
             preset = str(getattr(eye_color, "preset", "")).strip().lower()
             self.eye_color_preset = preset or None
@@ -170,18 +180,14 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
             custom_hue = getattr(eye_color, "custom_hue", None)
             custom_saturation = getattr(eye_color, "custom_saturation", None)
             self.eye_color_custom_hue = (
-                float(custom_hue)
-                if isinstance(custom_hue, (int, float))
-                else None
+                float(custom_hue) if isinstance(custom_hue, (int, float)) else None
             )
             self.eye_color_custom_saturation = (
                 float(custom_saturation)
                 if isinstance(custom_saturation, (int, float))
                 else None
             )
-        self.current_activity = activity
-        self._auth_backoff_delay_seconds = _AUTH_BACKOFF_BASE_DELAY_SECONDS
-        return None
+        self._initial_refresh_complete = True
 
     async def async_validate_connection(self) -> None:
         """Validate robot connectivity/auth for config entry setup."""
@@ -252,9 +258,30 @@ class VectorCoordinator(DataUpdateCoordinator[None]):
                 )
 
         await self.async_start_event_listener()
+        if self._telemetry_poll_task is None:
+            self._telemetry_poll_task = self.hass.async_create_background_task(
+                self._async_poll_telemetry(),
+                name=f"vector_telemetry_poll_{self.entry.entry_id}",
+            )
+
+    async def _async_poll_telemetry(self) -> None:
+        """Refresh telemetry independently of event stream notifications."""
+        while True:
+            await asyncio.sleep(_TELEMETRY_POLL_INTERVAL_SECONDS)
+            if not self.entry.pref_disable_polling:
+                await self.async_refresh()
 
     async def async_shutdown(self) -> None:
         """Disconnect active client resources."""
+        await super().async_shutdown()
+        if self._telemetry_poll_task is not None:
+            self._telemetry_poll_task.cancel()
+            try:
+                await self._telemetry_poll_task
+            except asyncio.CancelledError:
+                pass
+            self._telemetry_poll_task = None
+
         if self._event_listener_task is not None:
             self._event_listener_task.cancel()
             try:
