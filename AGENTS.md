@@ -173,7 +173,6 @@ The agent must NOT:
 - Introduce telemetry without explicit approval
 - Send robot or user data to third-party services
 - Add undocumented network endpoints
-- Bypass certificate validation
 - Disable encryption for convenience
 
 All cloud endpoints must be documented in `docs/`.
