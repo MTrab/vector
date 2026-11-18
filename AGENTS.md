@@ -86,7 +86,7 @@ The agent must use the exact versions defined in the project configuration files
 ### Requirements
 
 - OS: (Specify if restricted)
-- Runtime: Python 3.13
+- Runtime: Python 3.14, as defined in `.devcontainer.json`.
 
 ## Vector Robot Integration Rules
 
