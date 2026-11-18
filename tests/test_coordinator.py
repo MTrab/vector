@@ -89,7 +89,8 @@ def test_event_stream_publishes_and_throttles_sightings() -> None:
         hass = Mock()
         hass.async_create_background_task.side_effect = asyncio.create_task
         entry = SimpleNamespace(entry_id="vector-entry")
-        vector = VectorCoordinator(hass, entry)
+        with patch("homeassistant.helpers.frame.report_usage"):
+            vector = VectorCoordinator(hass, entry)
         client = SimpleNamespace(
             stub=SimpleNamespace(EventStream=Mock(return_value=stream))
         )
