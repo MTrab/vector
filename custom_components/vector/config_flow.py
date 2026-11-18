@@ -9,6 +9,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_HOST, CONF_PASSWORD
+from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
@@ -51,11 +52,26 @@ class VectorConfigFlow(ConfigFlow, domain=DOMAIN):
         except ValueError:
             return bool(HOST_RE.match(host))
 
-    def _discovery_unique_id(self, robot_name: str, host: str) -> str:
-        """Return a stable unique ID for a discovered robot."""
-        normalized_name = robot_name.lower().strip()
-        normalized_host = host.strip()
-        return f"{normalized_name}_{normalized_host}"
+    async def _async_set_robot_identity(
+        self, robot_name: str, *, reconfigure_entry: ConfigEntry | None = None
+    ) -> str:
+        """Reserve the robot name and check entries with legacy IDs."""
+        unique_id = robot_name.strip().lower()
+        await self.async_set_unique_id(unique_id)
+        if reconfigure_entry is None:
+            self._abort_if_unique_id_configured()
+
+        for entry in self._async_current_entries():
+            if entry is reconfigure_entry:
+                continue
+            # Ignored discovery entries may only have the original unique ID.
+            entry_name = (
+                entry.data.get(CONF_ROBOT_NAME)
+                or (entry.unique_id or "").partition("_")[0]
+            )
+            if unique_id == entry_name.strip().lower() or unique_id == entry.unique_id:
+                raise AbortFlow("already_configured")
+        return unique_id
 
     def _normalize_form_data(
         self, user_input: dict[str, Any]
@@ -99,20 +115,11 @@ class VectorConfigFlow(ConfigFlow, domain=DOMAIN):
             data[CONF_PASSWORD] = normalized[CONF_PASSWORD]
         return data
 
-    async def _async_set_discovery(
-        self, robot_name: str, host: str
-    ) -> ConfigFlowResult | None:
-        """Apply duplicate checks and set flow unique id for discovery."""
-        unique_id = self._discovery_unique_id(robot_name, host)
-        await self.async_set_unique_id(unique_id)
-        self._abort_if_unique_id_configured()
-        return None
-
     async def _async_start_discovery(
         self, robot_name: str, host: str
     ) -> ConfigFlowResult:
         """Start a user-confirmed discovery flow."""
-        await self._async_set_discovery(robot_name, host)
+        await self._async_set_robot_identity(robot_name)
         try:
             self.context["title_placeholders"] = {"robot_name": robot_name}
         except TypeError:
@@ -134,13 +141,7 @@ class VectorConfigFlow(ConfigFlow, domain=DOMAIN):
             normalized, errors = self._normalize_form_data(user_input)
 
             if not errors:
-                await self.async_set_unique_id(
-                    self._discovery_unique_id(
-                        normalized[CONF_ROBOT_NAME] or "",
-                        normalized[CONF_SERIAL] or normalized[CONF_HOST] or "",
-                    )
-                )
-                self._abort_if_unique_id_configured()
+                await self._async_set_robot_identity(normalized[CONF_ROBOT_NAME] or "")
                 return self.async_create_entry(
                     title=normalized[CONF_ROBOT_NAME] or "",
                     data=self._entry_data_from_normalized(normalized),
@@ -160,9 +161,20 @@ class VectorConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             normalized, errors = self._normalize_form_data(user_input)
             if not errors:
+                data = self._entry_data_from_normalized(normalized)
+                if (
+                    data[CONF_ROBOT_NAME].lower()
+                    != reconfigure_entry.data[CONF_ROBOT_NAME].lower()
+                ):
+                    unique_id = await self._async_set_robot_identity(
+                        data[CONF_ROBOT_NAME], reconfigure_entry=reconfigure_entry
+                    )
+                    return self.async_update_reload_and_abort(
+                        reconfigure_entry, unique_id=unique_id, data_updates=data
+                    )
                 return self.async_update_reload_and_abort(
                     reconfigure_entry,
-                    data_updates=self._entry_data_from_normalized(normalized),
+                    data_updates=data,
                 )
 
         return self.async_show_form(
@@ -203,13 +215,7 @@ class VectorConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             normalized, errors = self._normalize_form_data(user_input)
             if not errors:
-                await self.async_set_unique_id(
-                    self._discovery_unique_id(
-                        normalized[CONF_ROBOT_NAME] or "",
-                        normalized[CONF_SERIAL] or normalized[CONF_HOST] or "",
-                    )
-                )
-                self._abort_if_unique_id_configured()
+                await self._async_set_robot_identity(normalized[CONF_ROBOT_NAME] or "")
                 self._discovered_data = None
                 return self.async_create_entry(
                     title=normalized[CONF_ROBOT_NAME] or "",

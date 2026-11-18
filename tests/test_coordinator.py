@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, call, patch
+
+import pytest
 
 from custom_components.vector import coordinator
 from custom_components.vector.coordinator import (
@@ -133,6 +135,127 @@ def test_telemetry_poll_runs_independently_and_stops_on_shutdown(monkeypatch) ->
         await vector.async_shutdown()
         assert task.cancelled()
         assert vector._telemetry_poll_task is None
+
+    asyncio.run(run())
+
+
+def test_event_stream_publishes_and_throttles_sightings() -> None:
+    """Publish eligible face and cube observations from one shared stream."""
+    light_cube_type = 2
+    charger_type = 6
+
+    def event_response(event_type: str, **payload) -> SimpleNamespace:
+        return SimpleNamespace(
+            HasField=lambda field: field == "event",
+            event=SimpleNamespace(WhichOneof=lambda _: event_type, **payload),
+        )
+
+    def observed_face(name: str, face_id: int) -> SimpleNamespace:
+        return event_response(
+            "robot_observed_face",
+            robot_observed_face=SimpleNamespace(name=name, face_id=face_id),
+        )
+
+    def observed_object(object_type: int, object_id: int) -> SimpleNamespace:
+        return event_response(
+            "object_event",
+            object_event=SimpleNamespace(
+                WhichOneof=lambda _: "robot_observed_object",
+                robot_observed_object=SimpleNamespace(
+                    object_type=object_type, object_id=object_id
+                ),
+            ),
+        )
+
+    async def run() -> None:
+        observations = iter(
+            [
+                (0, observed_face(" ", -1)),
+                (0, observed_face(" Alex ", 1)),
+                (0, observed_object(charger_type, 1)),
+                (
+                    0,
+                    event_response(
+                        "object_event",
+                        object_event=SimpleNamespace(
+                            WhichOneof=lambda _: "object_tapped"
+                        ),
+                    ),
+                ),
+                (0, observed_object(light_cube_type, 1)),
+                (1, observed_face("Alex", 1)),
+                (1, observed_object(light_cube_type, 1)),
+                (1, observed_face("Sam", 2)),
+                (1, observed_object(light_cube_type, 2)),
+                (59, observed_face("Alex", 1)),
+                (59, observed_object(light_cube_type, 1)),
+                (60, observed_face("Alex", 1)),
+                (60, observed_object(light_cube_type, 1)),
+            ]
+        )
+        now = 0
+
+        async def read():
+            nonlocal now
+            observation = next(observations, None)
+            if observation is None:
+                raise asyncio.CancelledError
+            now, response = observation
+            return response
+
+        stream = Mock(read=read)
+        hass = Mock()
+        hass.async_create_background_task.side_effect = asyncio.create_task
+        entry = SimpleNamespace(entry_id="vector-entry")
+        with patch("homeassistant.helpers.frame.report_usage"):
+            vector = VectorCoordinator(hass, entry)
+        client = SimpleNamespace(
+            stub=SimpleNamespace(EventStream=Mock(return_value=stream))
+        )
+        messaging = SimpleNamespace(
+            protocol=SimpleNamespace(
+                EventRequest=Mock(), BLOCK_LIGHTCUBE1=light_cube_type
+            )
+        )
+        vector._async_get_client = AsyncMock(return_value=(client, messaging))
+
+        with (
+            patch.object(
+                coordinator,
+                "time",
+                SimpleNamespace(monotonic=lambda: now),
+            ),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await asyncio.gather(
+                vector.async_start_event_listener(), vector.async_start_event_listener()
+            )
+            await vector._event_listener_task
+
+        alex = call(
+            "vector_face_seen",
+            {"name": "Alex", "face_id": 1, "entry_id": entry.entry_id},
+        )
+        sam = call(
+            "vector_face_seen",
+            {"name": "Sam", "face_id": 2, "entry_id": entry.entry_id},
+        )
+        first_cube = call(
+            "vector_cube_seen", {"object_id": 1, "entry_id": entry.entry_id}
+        )
+        second_cube = call(
+            "vector_cube_seen", {"object_id": 2, "entry_id": entry.entry_id}
+        )
+        assert hass.bus.async_fire.call_args_list == [
+            alex,
+            first_cube,
+            sam,
+            second_cube,
+            alex,
+            first_cube,
+        ]
+        hass.async_create_background_task.assert_called_once()
+        stream.cancel.assert_called_once_with()
 
     asyncio.run(run())
 

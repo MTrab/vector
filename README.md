@@ -93,6 +93,28 @@ Use Home Assistant `Actions` (or services) under the `vector` domain:
 
 If you have multiple Vector devices, pass `device_id` to target a specific robot.
 
+## Face Recognition and Cube Events
+
+Use `vector_face_seen` as an event trigger in a Home Assistant automation. Vector
+reports named faces through its event stream, and the integration fires the event
+at most once every 60 seconds per name per robot.
+
+The event data includes `name` (the enrolled name), `face_id` (the ID reported by
+Vector), and `entry_id` (the Home Assistant config entry ID). You can filter the
+trigger by name:
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: vector_face_seen
+    event_data:
+      name: Alex
+```
+
+The integration also fires `vector_cube_seen` when Vector reports seeing a Light
+Cube. The event includes `object_id` (the ID reported by Vector) and `entry_id`.
+It fires at most once every 60 seconds per object ID per robot.
+
 ## Troubleshooting
 
 ### Integration cannot connect
